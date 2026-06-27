@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMediaRecorder } from './useMediaRecorder';
 import { useAudioStream } from './useAudioStream';
 import * as interviewApi from '../api/interviewApi';
+import { useInterviewStore } from '../store/interviewStore';
 import type { Subject, InterviewPhase, FeedbackData } from '../types/interview';
 
 export function useInterview() {
@@ -14,6 +15,7 @@ export function useInterview() {
 
   const { isRecording, recordedBlob, startRecording, stopRecording } = useMediaRecorder();
   const { isSpeaking, playStream } = useAudioStream();
+  const store = useInterviewStore();
 
   function selectSubject(subject: Subject) {
     setCurrentSubject(subject);
@@ -22,6 +24,7 @@ export function useInterview() {
     setRecordingStatus('Click Start Interview to begin');
     setFeedbackData(null);
     setIsFeedbackLoading(false);
+    store.setSubject(subject);
   }
 
   async function startInterview() {
@@ -74,7 +77,10 @@ export function useInterview() {
     setIsFeedbackLoading(true);
     try {
       const data = await interviewApi.getFeedback();
-      if (data.success) setFeedbackData(data.feedback);
+      if (data.success) {
+        setFeedbackData(data.feedback);
+        store.setFeedback(data.feedback);
+      }
     } catch {
       // mirror original: no extra error handling
     } finally {
@@ -89,6 +95,7 @@ export function useInterview() {
     setRecordingStatus('Click Start Interview to begin');
     setFeedbackData(null);
     setIsFeedbackLoading(false);
+    store.reset();
   }
 
   return {
