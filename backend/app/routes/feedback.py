@@ -19,7 +19,6 @@ def get_feedback():
         ]
     }, config)
     text = response["messages"][-1].content
-    print(f"\n[Feedback Generated]\n{text}\n")
     cleaned = text.strip()
     if "```" in cleaned:
         cleaned = cleaned.split("```")[1].replace("json", "").strip()

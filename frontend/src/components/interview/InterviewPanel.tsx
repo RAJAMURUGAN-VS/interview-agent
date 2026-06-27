@@ -107,7 +107,7 @@ export default function InterviewPanel({
               />
             )}
 
-            <p className="text-gray-400 text-base">{recordingStatus}</p>
+            <p role="status" aria-live="polite" className="text-gray-400 text-base">{recordingStatus}</p>
 
             {recordedBlob && !isRecording && (
               <button

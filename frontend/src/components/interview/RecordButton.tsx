@@ -11,6 +11,7 @@ export default function RecordButton({ isRecording, disabled, onClick }: RecordB
 
   return (
     <button
+      aria-label={isRecording ? 'Stop recording' : 'Record answer'}
       className={`${base} ${isRecording ? active : inactive}`}
       onClick={onClick}
       disabled={disabled}

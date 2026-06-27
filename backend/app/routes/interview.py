@@ -40,8 +40,6 @@ def submit_answer():
     if not answer or answer.strip() == "":
         answer = "[Candidate provided a verbal response]"
 
-    print(f"[Answer {agent_service.session.question_count}] {answer}")
-
     config = {"configurable": {"thread_id": agent_service.session.thread_id}}
 
     agent_service.invoke_agent({"messages": [{"role": "user", "content": answer}]}, config)
