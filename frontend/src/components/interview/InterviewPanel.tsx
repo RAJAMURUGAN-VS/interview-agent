@@ -36,7 +36,7 @@ export default function InterviewPanel({
     recordingStatus === 'Click Start Interview to begin' ||
     recordingStatus === 'Backend not connected';
 
-  // Show record button once interview has started (after Connecting... resolves)
+  // Show record button once interview has started
   const showRecordBtn = !showStartBtn && recordingStatus !== 'Connecting...';
 
   return (

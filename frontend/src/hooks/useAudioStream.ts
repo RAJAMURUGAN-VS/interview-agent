@@ -4,74 +4,69 @@ export function useAudioStream() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  function playStream(response: Response, onComplete?: () => void) {
-    const reader = response.body!.getReader();
-    const decoder = new TextDecoder();
-    const mediaSource = new MediaSource();
-    const audioUrl = URL.createObjectURL(mediaSource);
-
+  async function playStream(response: Response, onComplete?: () => void) {
+    // Stop any currently playing audio
     if (currentAudioRef.current) {
       currentAudioRef.current.pause();
       currentAudioRef.current = null;
     }
 
-    const audio = new Audio(audioUrl);
-    currentAudioRef.current = audio;
     setIsSpeaking(true);
-    audio.play().catch(() => {});
 
-    let sourceBuffer: SourceBuffer;
-    const queue: Uint8Array[] = [];
-    let isReady = false;
+    try {
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      const chunks: Uint8Array[] = [];
 
-    mediaSource.addEventListener('sourceopen', () => {
-      sourceBuffer = mediaSource.addSourceBuffer('audio/mpeg');
-      isReady = true;
-      while (queue.length > 0 && !sourceBuffer.updating) {
-        sourceBuffer.appendBuffer(queue.shift()!);
-      }
-      sourceBuffer.addEventListener('updateend', () => {
-        if (queue.length > 0 && !sourceBuffer.updating) {
-          sourceBuffer.appendBuffer(queue.shift()!);
-        }
-      });
-    });
+      // Read all base64 lines from the stream and decode to binary
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-    function processChunk({ done, value }: ReadableStreamReadResult<Uint8Array>): void {
-      if (done) {
-        if (mediaSource.readyState === 'open') {
-          try { mediaSource.endOfStream(); } catch (_) {}
-        }
-        if (onComplete) onComplete();
-        return;
-      }
-      const text = decoder.decode(value, { stream: true });
-      text.split('\n').forEach((line) => {
-        if (!line.trim()) return;
-        try {
-          const binary = atob(line);
-          const bytes = new Uint8Array(binary.length);
-          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-          if (isReady && !sourceBuffer.updating) {
-            sourceBuffer.appendBuffer(bytes);
-          } else {
-            queue.push(bytes);
+        const text = decoder.decode(value, { stream: true });
+        for (const line of text.split('\n')) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          try {
+            const binary = atob(trimmed);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) {
+              bytes[i] = binary.charCodeAt(i);
+            }
+            chunks.push(bytes);
+          } catch (e) {
+            console.error('Base64 decode error:', e);
           }
-        } catch (e) {
-          console.error('Base64 decode error:', e);
         }
-      });
-      reader.read().then(processChunk);
-    }
+      }
 
-    reader.read().then(processChunk);
+      // Combine all chunks into a single MP3 blob
+      const blob = new Blob(chunks, { type: 'audio/mpeg' });
+      const audioUrl = URL.createObjectURL(blob);
 
-    const cleanup = () => {
+      const audio = new Audio(audioUrl);
+      currentAudioRef.current = audio;
+
+      audio.onended = () => {
+        setIsSpeaking(false);
+        URL.revokeObjectURL(audioUrl);
+        currentAudioRef.current = null;
+        if (onComplete) onComplete();
+      };
+
+      audio.onerror = () => {
+        setIsSpeaking(false);
+        URL.revokeObjectURL(audioUrl);
+        currentAudioRef.current = null;
+        if (onComplete) onComplete();
+      };
+
+      await audio.play();
+    } catch (e) {
+      console.error('Audio stream error:', e);
       setIsSpeaking(false);
-      URL.revokeObjectURL(audioUrl);
-    };
-    audio.onended = cleanup;
-    audio.onerror = cleanup;
+      if (onComplete) onComplete();
+    }
   }
 
   return { isSpeaking, playStream };

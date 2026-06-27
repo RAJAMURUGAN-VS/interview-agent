@@ -31,7 +31,8 @@ export function useInterview() {
     setRecordingStatus('Connecting...');
     try {
       const response = await interviewApi.startInterview(currentSubject!);
-      playStream(response, () => {
+      setRecordingStatus('Listening...');
+      await playStream(response, () => {
         setRecordingStatus('Click to record');
       });
     } catch {
@@ -55,11 +56,11 @@ export function useInterview() {
     setRecordingStatus('Submitting...');
     try {
       const { meta, response } = await interviewApi.submitAnswer(recordedBlob);
-      // Only update question number if the header was actually present
       if (meta.questionNumber && meta.questionNumber > 1) {
         setQuestionNumber(meta.questionNumber);
       }
-      playStream(response, () => {
+      setRecordingStatus('Listening...');
+      await playStream(response, () => {
         if (meta.isComplete) {
           setPhase('feedback');
           setRecordingStatus('Interview ended');
