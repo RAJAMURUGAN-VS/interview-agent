@@ -31,7 +31,9 @@ export function useInterview() {
     setRecordingStatus('Connecting...');
     try {
       const response = await interviewApi.startInterview(currentSubject!);
-      playStream(response, () => {});
+      playStream(response, () => {
+        setRecordingStatus('Click to record');
+      });
     } catch {
       setRecordingStatus('Backend not connected');
     }
@@ -53,11 +55,16 @@ export function useInterview() {
     setRecordingStatus('Submitting...');
     try {
       const { meta, response } = await interviewApi.submitAnswer(recordedBlob);
-      if (meta.questionNumber) setQuestionNumber(meta.questionNumber);
+      // Only update question number if the header was actually present
+      if (meta.questionNumber && meta.questionNumber > 1) {
+        setQuestionNumber(meta.questionNumber);
+      }
       playStream(response, () => {
         if (meta.isComplete) {
           setPhase('feedback');
           setRecordingStatus('Interview ended');
+        } else {
+          setRecordingStatus('Click to record');
         }
       });
     } catch {

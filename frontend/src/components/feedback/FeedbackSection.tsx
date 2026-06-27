@@ -44,8 +44,8 @@ export default function FeedbackSection({
           </div>
         </header>
 
-        <div className="flex-1 p-4 lg:p-8 overflow-y-auto">
-          <div className="mt-10 pt-6 border-t border-zinc-800/50">
+        <div className="flex-1 p-4 lg:p-8 overflow-y-auto flex flex-col items-center justify-start">
+          <div className="w-full max-w-xl mt-6 pt-6 border-t border-zinc-800/50">
             {!feedbackData ? (
               <div className="text-center mb-6">
                 <p className="text-gray-300 mb-4 text-base">Interview completed!</p>
