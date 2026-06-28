@@ -16,9 +16,9 @@ export function useAudioStream() {
     try {
       const reader = response.body!.getReader();
       const decoder = new TextDecoder();
-      const chunks: Uint8Array[] = [];
+      // Collect all raw binary bytes decoded from base64 lines
+      const allBytes: number[] = [];
 
-      // Read all base64 lines from the stream and decode to binary
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -29,34 +29,42 @@ export function useAudioStream() {
           if (!trimmed) continue;
           try {
             const binary = atob(trimmed);
-            const bytes = new Uint8Array(binary.length);
             for (let i = 0; i < binary.length; i++) {
-              bytes[i] = binary.charCodeAt(i);
+              allBytes.push(binary.charCodeAt(i));
             }
-            chunks.push(bytes);
           } catch (e) {
             console.error('Base64 decode error:', e);
           }
         }
       }
 
-      // Combine all chunks into a single MP3 blob
-      const blob = new Blob(chunks, { type: 'audio/mpeg' });
-      const audioUrl = URL.createObjectURL(blob);
+      if (allBytes.length === 0) {
+        setIsSpeaking(false);
+        if (onComplete) onComplete();
+        return;
+      }
 
-      const audio = new Audio(audioUrl);
+      // Convert to base64 data URL — avoids range request issues with blob URLs
+      const uint8 = new Uint8Array(allBytes);
+      let binary = '';
+      for (let i = 0; i < uint8.length; i++) {
+        binary += String.fromCharCode(uint8[i]);
+      }
+      const base64 = btoa(binary);
+      const dataUrl = `data:audio/mpeg;base64,${base64}`;
+
+      const audio = new Audio(dataUrl);
       currentAudioRef.current = audio;
 
       audio.onended = () => {
         setIsSpeaking(false);
-        URL.revokeObjectURL(audioUrl);
         currentAudioRef.current = null;
         if (onComplete) onComplete();
       };
 
-      audio.onerror = () => {
+      audio.onerror = (e) => {
+        console.error('Audio playback error:', e);
         setIsSpeaking(false);
-        URL.revokeObjectURL(audioUrl);
         currentAudioRef.current = null;
         if (onComplete) onComplete();
       };
