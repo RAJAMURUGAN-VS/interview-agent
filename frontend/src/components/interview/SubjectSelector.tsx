@@ -1,22 +1,37 @@
+import { useNavigate, useParams } from 'react-router-dom';
 import type { Subject } from '../../types/interview';
+import { toSlug } from '../../types/interview';
 
 const subjects: { subject: Subject; icon: string; color: string }[] = [
-  { subject: 'Self Introduction', icon: 'fas fa-user',       color: 'bg-blue-500/20 text-blue-400' },
-  { subject: 'Generative AI',     icon: 'fas fa-brain',      color: 'bg-purple-500/20 text-purple-400' },
-  { subject: 'Python',            icon: 'fab fa-python',     color: 'bg-yellow-500/20 text-yellow-400' },
-  { subject: 'English',           icon: 'fas fa-language',   color: 'bg-green-500/20 text-green-400' },
-  { subject: 'HTML',              icon: 'fab fa-html5',      color: 'bg-orange-500/20 text-orange-400' },
-  { subject: 'CSS',               icon: 'fab fa-css3-alt',   color: 'bg-blue-500/20 text-blue-400' },
+  { subject: 'Self Introduction', icon: 'fas fa-user',      color: 'bg-blue-500/20 text-blue-400' },
+  { subject: 'Generative AI',     icon: 'fas fa-brain',     color: 'bg-purple-500/20 text-purple-400' },
+  { subject: 'Python',            icon: 'fab fa-python',    color: 'bg-yellow-500/20 text-yellow-400' },
+  { subject: 'English',           icon: 'fas fa-language',  color: 'bg-green-500/20 text-green-400' },
+  { subject: 'HTML',              icon: 'fab fa-html5',     color: 'bg-orange-500/20 text-orange-400' },
+  { subject: 'CSS',               icon: 'fab fa-css3-alt',  color: 'bg-blue-500/20 text-blue-400' },
 ];
 
+// Can be used standalone (welcome page) or embedded in interview/feedback pages
 interface SubjectSelectorProps {
-  onSelect: (subject: Subject) => void;
-  activeSubject: Subject | null;
+  activeSubject?: Subject | null;
+  onSelect?: (subject: Subject) => void; // optional override for embedded use
 }
 
-export default function SubjectSelector({ onSelect, activeSubject }: SubjectSelectorProps) {
+export default function SubjectSelector({ activeSubject, onSelect }: SubjectSelectorProps) {
+  const navigate = useNavigate();
+  const params = useParams<{ subject?: string }>();
+  const activeSlug = params.subject ?? (activeSubject ? toSlug(activeSubject) : null);
+
+  function handleSelect(subject: Subject) {
+    if (onSelect) {
+      onSelect(subject);
+    } else {
+      navigate(`/interview/${toSlug(subject)}`);
+    }
+  }
+
   return (
-    <>
+    <div className="min-h-screen flex flex-col lg:flex-row">
       {/* Sidebar */}
       <aside className="w-full lg:w-1/5 bg-gradient-to-b from-[#0a0a0a] to-black border-b lg:border-b-0 lg:border-r border-zinc-800/50 p-4 lg:p-6 flex flex-col">
         <div className="flex items-center gap-3 mb-8">
@@ -32,11 +47,12 @@ export default function SubjectSelector({ onSelect, activeSubject }: SubjectSele
 
         <div className="flex flex-row lg:flex-col gap-2 overflow-x-auto lg:overflow-x-visible pb-2 lg:pb-0">
           {subjects.map(({ subject, icon, color }) => {
-            const isActive = activeSubject === subject;
+            const slug = toSlug(subject);
+            const isActive = activeSlug === slug;
             return (
               <button
                 key={subject}
-                onClick={() => onSelect(subject)}
+                onClick={() => handleSelect(subject)}
                 className={`flex items-center gap-3 border rounded-xl p-3 transition-all duration-300 text-left whitespace-nowrap flex-shrink-0
                   ${isActive
                     ? 'bg-gradient-to-r from-[#667eea] to-[#764ba2] border-[#667eea] shadow-[0_0_20px_rgba(102,126,234,0.4)]'
@@ -57,7 +73,7 @@ export default function SubjectSelector({ onSelect, activeSubject }: SubjectSele
         </div>
       </aside>
 
-      {/* Welcome main area */}
+      {/* Welcome main area — only shown on / route */}
       <main className="flex-1 lg:w-4/5 flex flex-col bg-black">
         <header className="px-4 lg:px-8 py-6 lg:py-8 border-b border-zinc-800/50">
           <div className="text-center max-w-3xl mx-auto">
@@ -83,6 +99,6 @@ export default function SubjectSelector({ onSelect, activeSubject }: SubjectSele
           </div>
         </div>
       </main>
-    </>
+    </div>
   );
 }

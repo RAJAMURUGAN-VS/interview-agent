@@ -24,3 +24,17 @@ export interface FeedbackResponse {
   success: boolean;
   feedback: FeedbackData;
 }
+
+// URL slug <-> Subject mapping
+export const subjectSlugs: Record<string, Subject> = {
+  'self-introduction': 'Self Introduction',
+  'generative-ai':     'Generative AI',
+  'python':            'Python',
+  'english':           'English',
+  'html':              'HTML',
+  'css':               'CSS',
+};
+
+export function toSlug(subject: Subject): string {
+  return subject.toLowerCase().replace(/\s+/g, '-');
+}
