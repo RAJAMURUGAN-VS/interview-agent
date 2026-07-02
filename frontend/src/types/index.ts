@@ -1,3 +1,4 @@
+// Core subject types
 export type InterviewSubject =
   | 'Operating System'
   | 'Object Oriented Programming'

@@ -1,18 +1,17 @@
 import { useEffect } from 'react';
-import { useParams, useNavigate, Navigate } from 'react-router-dom';
+import { useParams, Navigate, useNavigate } from 'react-router-dom';
 import { subjectSlugs } from '../types/interview';
 import { useInterview } from '../hooks/useInterview';
-import Sidebar from '../components/layout/Sidebar';
 import InterviewPanel from '../components/interview/InterviewPanel';
-import ErrorBoundary from '../components/ui/ErrorBoundary';
 
 export default function InterviewPage() {
   const { subject: slugParam } = useParams<{ subject: string }>();
   const navigate = useNavigate();
+
   const subject = slugParam ? subjectSlugs[slugParam] : undefined;
   const interview = useInterview();
 
-  // Set subject when page loads or slug changes
+  // Sync URL subject into interview state
   useEffect(() => {
     if (!subject) return;
     if (interview.currentSubject !== subject) {
@@ -28,27 +27,26 @@ export default function InterviewPage() {
     }
   }, [interview.phase, slugParam, navigate]);
 
-  if (!subject) return <Navigate to="/" replace />;
+  if (!subject) return <Navigate to="/interview" replace />;
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row">
-      <Sidebar />
-      <ErrorBoundary>
-        <InterviewPanel
-          currentSubject={interview.currentSubject}
-          questionNumber={interview.questionNumber}
-          isSpeaking={interview.isSpeaking}
-          isRecording={interview.isRecording}
-          recordedBlob={interview.recordedBlob}
-          recordingStatus={interview.recordingStatus}
-          feedbackData={interview.feedbackData}
-          isFeedbackLoading={interview.isFeedbackLoading}
-          startInterview={interview.startInterview}
-          toggleRecording={interview.toggleRecording}
-          submitAnswer={interview.submitAnswer}
-          endInterview={interview.endInterview}
-        />
-      </ErrorBoundary>
-    </div>
+    <InterviewPanel
+      phase={interview.phase}
+      currentSubject={interview.currentSubject}
+      questionNumber={interview.questionNumber}
+      recordingStatus={interview.recordingStatus}
+      isSpeaking={interview.isSpeaking}
+      isRecording={interview.isRecording}
+      recordedBlob={interview.recordedBlob}
+      feedbackData={interview.feedbackData}
+      isFeedbackLoading={interview.isFeedbackLoading}
+      selectSubject={interview.selectSubject}
+      startInterview={interview.startInterview}
+      toggleRecording={interview.toggleRecording}
+      submitAnswer={interview.submitAnswer}
+      endInterview={interview.endInterview}
+      getFeedback={interview.getFeedback}
+      resetInterview={interview.resetInterview}
+    />
   );
 }
