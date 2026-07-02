@@ -19,7 +19,7 @@ export function useInterview() {
 
   function selectSubject(subject: InterviewSubject) {
     setCurrentSubject(subject);
-    setPhase('active');
+    setPhase('welcome');
     setQuestionNumber(1);
     setRecordingStatus('Click Start Interview to begin');
     setFeedbackData(null);
@@ -28,6 +28,7 @@ export function useInterview() {
   }
 
   async function startInterview() {
+    setPhase('active');
     setRecordingStatus('Connecting...');
     try {
       const response = await interviewApi.startInterview(currentSubject!);
