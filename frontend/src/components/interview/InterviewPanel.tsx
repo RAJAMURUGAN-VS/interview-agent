@@ -1,124 +1,133 @@
-import Badge from '../ui/Badge';
+import type { InterviewSubject, InterviewPhase, FeedbackData } from '../../types';
+import SubjectSelector from './SubjectSelector';
 import QuestionTracker from './QuestionTracker';
 import SpeakingBubble from './SpeakingBubble';
 import RecordButton from './RecordButton';
-import type { Subject, FeedbackData } from '../../types/interview';
+import Badge from '../ui/Badge';
+import Button from '../ui/Button';
+import FeedbackSection from '../feedback/FeedbackSection';
 
-interface InterviewPanelProps {
-  currentSubject: Subject | null;
+interface Props {
+  phase: InterviewPhase;
+  currentSubject: InterviewSubject | null;
   questionNumber: number;
+  recordingStatus: string;
   isSpeaking: boolean;
   isRecording: boolean;
   recordedBlob: Blob | null;
-  recordingStatus: string;
   feedbackData: FeedbackData | null;
   isFeedbackLoading: boolean;
+  selectSubject: (s: InterviewSubject) => void;
   startInterview: () => void;
   toggleRecording: () => void;
   submitAnswer: () => void;
   endInterview: () => void;
+  getFeedback: () => void;
+  resetInterview: () => void;
 }
 
-export default function InterviewPanel({
-  currentSubject,
-  questionNumber,
-  isSpeaking,
-  isRecording,
-  recordedBlob,
-  recordingStatus,
-  startInterview,
-  toggleRecording,
-  submitAnswer,
-  endInterview,
-}: InterviewPanelProps) {
-  const showStartBtn =
-    recordingStatus === 'Click Start Interview to begin' ||
-    recordingStatus === 'Backend not connected';
+export default function InterviewPanel(props: Props) {
+  const {
+    phase, currentSubject, questionNumber, recordingStatus,
+    isSpeaking, isRecording, recordedBlob,
+    feedbackData, isFeedbackLoading,
+    selectSubject, startInterview, toggleRecording,
+    submitAnswer, endInterview, getFeedback, resetInterview,
+  } = props;
 
-  const showRecordBtn = !showStartBtn && recordingStatus !== 'Connecting...';
+  // Welcome phase — no subject chosen yet
+  if (phase === 'welcome' && !currentSubject) {
+    return (
+      <SubjectSelector
+        onSelect={selectSubject}
+        activeSubject={currentSubject}
+      />
+    );
+  }
 
+  // Feedback phase
+  if (phase === 'feedback') {
+    return (
+      <FeedbackSection
+        isFeedbackLoading={isFeedbackLoading}
+        feedbackData={feedbackData}
+        onGetFeedback={getFeedback}
+        onNewInterview={resetInterview}
+      />
+    );
+  }
+
+  // Active interview phase + welcome with subject selected
   return (
-    <main className="flex-1 flex flex-col bg-black">
-      {/* Header */}
-      <header className="px-4 lg:px-8 py-5 border-b border-zinc-800/50">
-        <div className="text-center max-w-3xl mx-auto">
-          <h1 className="font-space font-bold text-2xl lg:text-4xl tracking-tight mb-1">
-            <span className="bg-gradient-to-r from-[#667eea] via-[#764ba2] to-[#f093fb] bg-clip-text text-transparent">
-              Master Your Interview
-            </span>
-          </h1>
-          <p className="text-gray-400 text-sm lg:text-base font-light">
-            Ace Your Technical Interviews with AI-Powered Practice and Feedback
-          </p>
-        </div>
-      </header>
+    <div className="animate-fade-in max-w-2xl mx-auto px-4 pt-24 pb-12">
 
-      <div className="flex-1 p-4 lg:p-6 overflow-y-auto flex flex-col">
-        {/* Subject badge + question counter */}
-        <div className="flex flex-col sm:flex-row justify-between items-center gap-3 mb-5">
-          {currentSubject && <Badge subject={currentSubject} />}
-          <QuestionTracker questionNumber={questionNumber} />
-        </div>
+      {/* Header row */}
+      <div className="flex items-center justify-between mb-8">
+        {currentSubject && <Badge subject={currentSubject} />}
+        <QuestionTracker questionNumber={questionNumber} />
+      </div>
 
-        {/* Natalie avatar */}
-        <div className="flex flex-col items-center mb-5">
-          <div className="w-24 h-24 lg:w-28 lg:h-28 rounded-full overflow-hidden border-4 border-zinc-700/50 mb-3 shadow-2xl">
-            <img
-              src="https://www.whiteroomstudio.com.sg/wordpress/wp-content/uploads/2021/10/professional-headshot-photography-linkedin-singapore-5.jpeg"
-              alt="Natalie"
-              className="w-full h-full object-cover"
-            />
+      {/* Main interview card */}
+      <div className="card mb-4">
+
+        {/* Start prompt */}
+        {phase === 'welcome' && currentSubject && (
+          <div className="text-center py-6 animate-fade-in">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[#1c1c27]
+              border border-[#2a2a3d] flex items-center justify-center">
+              <i className="fas fa-robot text-[#4f46e5] text-2xl" />
+            </div>
+            <h2 className="text-lg font-semibold text-[#f0f0ff] mb-2">
+              Ready to begin?
+            </h2>
+            <p className="text-sm text-[#8b8ba8] mb-6">
+              Natalie will ask you 5 questions on{' '}
+              <span className="text-[#f0f0ff] font-medium">{currentSubject}</span>
+            </p>
+            <Button label="Start Interview" onClick={startInterview} />
           </div>
-          <p className="text-gray-300 text-base font-medium">Natalie</p>
-        </div>
+        )}
 
-        {/* Speaking bubble */}
-        <SpeakingBubble visible={isSpeaking} />
+        {/* Active recording view */}
+        {phase === 'active' && (
+          <div className="animate-fade-in">
+            <SpeakingBubble visible={isSpeaking} />
 
-        {/* Recording controls */}
-        <div className="flex flex-col items-center gap-4 mb-5 mt-2">
-          {showStartBtn && (
-            <button
-              className="bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white px-8 py-3 rounded-full font-bold text-base hover:shadow-lg hover:shadow-purple-500/30 transition-all duration-300"
-              onClick={startInterview}
-            >
-              Start Interview
-            </button>
-          )}
+            {!isSpeaking && (
+              <div className="flex flex-col items-center gap-6 py-4">
+                <RecordButton
+                  isRecording={isRecording}
+                  disabled={isSpeaking}
+                  onClick={toggleRecording}
+                />
+                <p
+                  role="status"
+                  aria-live="polite"
+                  className="text-sm text-[#8b8ba8] text-center"
+                >
+                  {recordingStatus}
+                </p>
+                {recordedBlob && !isRecording && (
+                  <Button label="Submit Answer" onClick={submitAnswer} />
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
-          {showRecordBtn && (
-            <RecordButton
-              isRecording={isRecording}
-              disabled={isSpeaking || recordingStatus === 'Submitting...'}
-              onClick={toggleRecording}
-            />
-          )}
-
-          <p role="status" aria-live="polite" className="text-gray-400 text-sm text-center">
-            {recordingStatus}
-          </p>
-
-          {recordedBlob && !isRecording && recordingStatus === 'Recording complete' && (
-            <button
-              className="bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white px-8 py-3 rounded-full font-bold text-base hover:shadow-lg hover:shadow-purple-500/30 transition-all duration-300"
-              onClick={submitAnswer}
-            >
-              Submit Answer
-            </button>
-          )}
-        </div>
-
-        {/* End interview */}
-        <div className="text-center mt-auto">
+      {/* End interview button */}
+      {phase === 'active' && !isSpeaking && (
+        <div className="text-center">
           <button
-            disabled={showStartBtn || isSpeaking}
-            className="border-2 border-zinc-700 text-gray-300 px-6 py-2.5 rounded-xl transition-all duration-300 hover:border-red-500/50 hover:text-red-400 font-medium text-sm disabled:opacity-30 disabled:cursor-not-allowed"
             onClick={endInterview}
+            className="text-xs text-[#4a4a6a] hover:text-[#8b8ba8]
+              transition-colors duration-200"
           >
-            End Interview
+            End interview early
           </button>
         </div>
-      </div>
-    </main>
+      )}
+    </div>
   );
 }

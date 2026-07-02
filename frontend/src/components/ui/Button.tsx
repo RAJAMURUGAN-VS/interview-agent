@@ -2,19 +2,34 @@ interface ButtonProps {
   label: string;
   onClick: () => void;
   disabled?: boolean;
-  variant: 'primary' | 'ghost' | 'danger';
+  variant?: 'primary' | 'ghost' | 'danger';
+  fullWidth?: boolean;
 }
 
-export default function Button({ label, onClick, disabled = false, variant }: ButtonProps) {
-  const base = 'px-8 py-3 rounded-full font-bold text-base transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed';
-  const styles: Record<string, string> = {
-    primary: 'bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white hover:shadow-lg hover:shadow-purple-500/30',
-    ghost:   'border-2 border-zinc-700 text-gray-300 rounded-xl px-6 py-2.5 hover:border-red-500/50 hover:text-red-400 font-medium text-sm',
-    danger:  'bg-gradient-to-r from-[#667eea] via-[#764ba2] to-[#f093fb] text-white hover:opacity-90 shadow-lg shadow-purple-500/30',
+export default function Button({
+  label, onClick, disabled = false,
+  variant = 'primary', fullWidth = false
+}: ButtonProps) {
+  const base = `inline-flex items-center justify-center gap-2 font-semibold
+    rounded-[10px] px-5 py-2.5 text-sm transition-all duration-200
+    disabled:opacity-40 disabled:cursor-not-allowed
+    ${fullWidth ? 'w-full' : ''}`;
+
+  const styles = {
+    primary: `bg-[#4f46e5] hover:bg-[#4338ca] text-white
+              hover:shadow-[0_0_20px_rgba(79,70,229,0.3)]`,
+    ghost:   `bg-transparent border border-[#2a2a3d] text-[#8b8ba8]
+              hover:border-[#4f46e5] hover:text-[#f0f0ff]
+              hover:bg-[rgba(79,70,229,0.08)]`,
+    danger:  `bg-[#ef4444] hover:bg-[#dc2626] text-white`,
   };
 
   return (
-    <button className={`${base} ${styles[variant]}`} onClick={onClick} disabled={disabled}>
+    <button
+      className={`${base} ${styles[variant]}`}
+      onClick={onClick}
+      disabled={disabled}
+    >
       {label}
     </button>
   );

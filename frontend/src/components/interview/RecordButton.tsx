@@ -1,26 +1,29 @@
-interface RecordButtonProps {
+interface Props {
   isRecording: boolean;
   disabled: boolean;
   onClick: () => void;
 }
 
-export default function RecordButton({ isRecording, disabled, onClick }: RecordButtonProps) {
-  const base = 'w-20 h-20 lg:w-24 lg:h-24 rounded-full flex items-center justify-center transition-all duration-300 border-2';
-  const active = 'bg-red-500 text-white border-red-500 recording-active';
-  const inactive = 'bg-zinc-800/80 text-gray-300 border-zinc-700/50 hover:border-zinc-500';
-
+export default function RecordButton({ isRecording, disabled, onClick }: Props) {
   return (
     <button
-      aria-label={isRecording ? 'Stop recording' : 'Record answer'}
-      className={`${base} ${isRecording ? active : inactive}`}
       onClick={onClick}
       disabled={disabled}
+      aria-label={isRecording ? 'Stop recording' : 'Record answer'}
+      className={`relative w-16 h-16 rounded-full flex items-center
+        justify-center transition-all duration-200
+        disabled:opacity-40 disabled:cursor-not-allowed
+        ${isRecording
+          ? 'bg-[#ef4444] shadow-[0_0_24px_rgba(239,68,68,0.4)] scale-110'
+          : 'bg-[#1c1c27] border-2 border-[#2a2a3d] hover:border-[#4f46e5] hover:bg-[#2a2a3d]'}`}
     >
-      {isRecording ? (
-        <i className="fas fa-stop text-2xl lg:text-3xl" />
-      ) : (
-        <i className="fas fa-microphone text-2xl lg:text-3xl" />
+      {isRecording && (
+        <span className="absolute inset-0 rounded-full bg-[#ef4444]
+          animate-ping opacity-30" />
       )}
+      <i className={`text-lg ${isRecording
+        ? 'fas fa-stop text-white'
+        : 'fas fa-microphone text-[#8b8ba8]'}`} />
     </button>
   );
 }

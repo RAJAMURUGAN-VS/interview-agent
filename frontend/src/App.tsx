@@ -1,17 +1,30 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
-import WelcomePage from './pages/WelcomePage';
-import InterviewPage from './pages/InterviewPage';
-import FeedbackPage from './pages/FeedbackPage';
+import { useAppStore } from './store/appStore';
+import { useInterview } from './hooks/useInterview';
+import AppShell from './components/layout/AppShell';
+import NavBar from './components/layout/NavBar';
+import InterviewPanel from './components/interview/InterviewPanel';
+import NotesPage from './components/notes/NotesPage';
+import { ErrorBoundary } from './components/ui/ErrorBoundary';
 
 export default function App() {
+  const { activeTab, setTab } = useAppStore();
+  const interview = useInterview();
+
   return (
-    <div className="bg-black min-h-screen text-white font-inter">
-      <Routes>
-        <Route path="/" element={<WelcomePage />} />
-        <Route path="/interview/:subject" element={<InterviewPage />} />
-        <Route path="/interview/:subject/feedback" element={<FeedbackPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </div>
+    <AppShell>
+      <NavBar activeTab={activeTab} onTabChange={setTab} />
+      <main>
+        {activeTab === 'interview' && (
+          <ErrorBoundary>
+            <InterviewPanel {...interview} />
+          </ErrorBoundary>
+        )}
+        {activeTab === 'notes' && (
+          <ErrorBoundary>
+            <NotesPage />
+          </ErrorBoundary>
+        )}
+      </main>
+    </AppShell>
   );
 }

@@ -1,64 +1,61 @@
+import type { FeedbackData } from '../../types';
 import FeedbackCard from './FeedbackCard';
-import type { FeedbackData, Subject } from '../../types/interview';
+import Button from '../ui/Button';
 
-interface FeedbackSectionProps {
+interface Props {
   isFeedbackLoading: boolean;
   feedbackData: FeedbackData | null;
-  currentSubject: Subject | null;
   onGetFeedback: () => void;
   onNewInterview: () => void;
 }
 
 export default function FeedbackSection({
-  isFeedbackLoading,
-  feedbackData,
-  currentSubject,
-  onGetFeedback,
-  onNewInterview,
-}: FeedbackSectionProps) {
+  isFeedbackLoading, feedbackData, onGetFeedback, onNewInterview
+}: Props) {
   return (
-    <main className="flex-1 flex flex-col bg-black">
-      <header className="px-4 lg:px-8 py-5 border-b border-zinc-800/50">
-        <div className="text-center max-w-3xl mx-auto">
-          <h1 className="font-space font-bold text-2xl lg:text-4xl tracking-tight mb-1">
-            <span className="bg-gradient-to-r from-[#667eea] via-[#764ba2] to-[#f093fb] bg-clip-text text-transparent">
-              Interview Feedback
-            </span>
-          </h1>
-          <p className="text-gray-400 text-sm lg:text-base font-light">
-            {currentSubject ? `${currentSubject} — Session Review` : 'Session Review'}
-          </p>
-        </div>
-      </header>
+    <div className="animate-fade-in max-w-2xl mx-auto px-4 pt-24 pb-12">
 
-      <div className="flex-1 p-4 lg:p-8 overflow-y-auto flex flex-col items-center">
-        <div className="w-full max-w-xl mt-6">
-          {!feedbackData ? (
-            <div className="text-center mb-6">
-              <p className="text-gray-300 mb-4 text-base">Interview completed!</p>
-              <button
-                className="bg-gradient-to-r from-[#667eea] via-[#764ba2] to-[#f093fb] text-white px-8 py-3 rounded-full font-bold text-base hover:opacity-90 transition-all duration-300 shadow-lg shadow-purple-500/30 disabled:opacity-50"
-                onClick={onGetFeedback}
-                disabled={isFeedbackLoading}
-              >
-                {isFeedbackLoading ? 'Generating...' : 'Get Feedback'}
-              </button>
-            </div>
-          ) : (
-            <>
-              <FeedbackCard feedbackData={feedbackData} subject={currentSubject!} />
-              <div className="text-center mt-8">
-                <button
-                  className="bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white px-10 py-3 rounded-xl font-bold text-base hover:shadow-lg hover:shadow-purple-500/30 transition-all duration-300"
-                  onClick={onNewInterview}
-                >
-                  Start New Interview
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+      <div className="text-center mb-8">
+        <p className="text-xs uppercase tracking-widest text-[#4f46e5]
+          font-medium mb-2">
+          Interview Complete
+        </p>
+        <h2 className="text-2xl font-bold text-[#f0f0ff] tracking-tight">
+          {feedbackData ? 'Your Results' : 'Ready for feedback?'}
+        </h2>
       </div>
-    </main>
+
+      {!feedbackData && (
+        <div className="card text-center py-10">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full
+            bg-[#1c1c27] border border-[#2a2a3d]
+            flex items-center justify-center">
+            <i className="fas fa-chart-bar text-[#4f46e5] text-2xl" />
+          </div>
+          <p className="text-sm text-[#8b8ba8] mb-6">
+            Natalie will analyse your answers and give you a score with
+            detailed feedback.
+          </p>
+          <Button
+            label={isFeedbackLoading ? 'Generating…' : 'Get Feedback'}
+            onClick={onGetFeedback}
+            disabled={isFeedbackLoading}
+          />
+        </div>
+      )}
+
+      {feedbackData && (
+        <>
+          <FeedbackCard feedbackData={feedbackData} />
+          <div className="mt-6 text-center">
+            <Button
+              label="Start New Interview"
+              onClick={onNewInterview}
+              variant="ghost"
+            />
+          </div>
+        </>
+      )}
+    </div>
   );
 }

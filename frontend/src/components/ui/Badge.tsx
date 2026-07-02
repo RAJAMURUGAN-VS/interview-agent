@@ -1,25 +1,41 @@
-import type { Subject } from '../../types/interview';
+import type { InterviewSubject } from '../../types';
 
-const iconMap: Record<Subject, string> = {
-  'Self Introduction': 'fas fa-user text-blue-400',
-  'Generative AI':     'fas fa-brain text-purple-400',
-  'Python':            'fab fa-python text-yellow-400',
-  'English':           'fas fa-language text-green-400',
-  'HTML':              'fab fa-html5 text-orange-400',
-  'CSS':               'fab fa-css3-alt text-blue-400',
+const SUBJECT_CONFIG: Record<InterviewSubject, {
+  icon: string; colorClass: string; bgClass: string; borderClass: string; short: string;
+}> = {
+  'Operating System': {
+    icon: 'fas fa-microchip',
+    colorClass: 'subject-os', bgClass: 'bg-os', borderClass: 'border-os',
+    short: 'OS',
+  },
+  'Object Oriented Programming': {
+    icon: 'fas fa-cube',
+    colorClass: 'subject-oop', bgClass: 'bg-oop', borderClass: 'border-oop',
+    short: 'OOP',
+  },
+  'Database Management System': {
+    icon: 'fas fa-database',
+    colorClass: 'subject-dbms', bgClass: 'bg-dbms', borderClass: 'border-dbms',
+    short: 'DBMS',
+  },
+  'Computer Networks': {
+    icon: 'fas fa-network-wired',
+    colorClass: 'subject-cn', bgClass: 'bg-cn', borderClass: 'border-cn',
+    short: 'CN',
+  },
 };
 
-interface BadgeProps {
-  subject: Subject;
-}
+interface BadgeProps { subject: InterviewSubject; }
 
 export default function Badge({ subject }: BadgeProps) {
+  const cfg = SUBJECT_CONFIG[subject];
   return (
-    <div className="flex items-center gap-3">
-      <span className="bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white px-5 py-2 rounded-full font-semibold shadow-lg">
-        {subject}
-      </span>
-      <i className={`${iconMap[subject]} text-2xl`} />
-    </div>
+    <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg
+      border text-sm font-medium ${cfg.bgClass} ${cfg.borderClass} ${cfg.colorClass}`}>
+      <i className={cfg.icon} />
+      {subject}
+    </span>
   );
 }
+
+export { SUBJECT_CONFIG };

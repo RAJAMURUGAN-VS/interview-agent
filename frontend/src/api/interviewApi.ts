@@ -1,8 +1,8 @@
-import type { FeedbackResponse, Subject, SubmitAnswerMeta } from '../types/interview';
+import type { FeedbackResponse, InterviewSubject, SubmitAnswerMeta } from '../types';
 
 const BASE_URL = import.meta.env.VITE_API_URL;
 
-export async function startInterview(subject: Subject): Promise<Response> {
+export async function startInterview(subject: InterviewSubject): Promise<Response> {
   return fetch(`${BASE_URL}/start-interview`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

@@ -1,104 +1,69 @@
-import { useNavigate, useParams } from 'react-router-dom';
-import type { Subject } from '../../types/interview';
-import { toSlug } from '../../types/interview';
+import { SUBJECT_CONFIG } from '../ui/Badge';
+import type { InterviewSubject } from '../../types';
 
-const subjects: { subject: Subject; icon: string; color: string }[] = [
-  { subject: 'Self Introduction', icon: 'fas fa-user',      color: 'bg-blue-500/20 text-blue-400' },
-  { subject: 'Generative AI',     icon: 'fas fa-brain',     color: 'bg-purple-500/20 text-purple-400' },
-  { subject: 'Python',            icon: 'fab fa-python',    color: 'bg-yellow-500/20 text-yellow-400' },
-  { subject: 'English',           icon: 'fas fa-language',  color: 'bg-green-500/20 text-green-400' },
-  { subject: 'HTML',              icon: 'fab fa-html5',     color: 'bg-orange-500/20 text-orange-400' },
-  { subject: 'CSS',               icon: 'fab fa-css3-alt',  color: 'bg-blue-500/20 text-blue-400' },
+const SUBJECTS: InterviewSubject[] = [
+  'Operating System',
+  'Object Oriented Programming',
+  'Database Management System',
+  'Computer Networks',
 ];
 
-// Can be used standalone (welcome page) or embedded in interview/feedback pages
-interface SubjectSelectorProps {
-  activeSubject?: Subject | null;
-  onSelect?: (subject: Subject) => void; // optional override for embedded use
+interface Props {
+  onSelect: (subject: InterviewSubject) => void;
+  activeSubject: InterviewSubject | null;
 }
 
-export default function SubjectSelector({ activeSubject, onSelect }: SubjectSelectorProps) {
-  const navigate = useNavigate();
-  const params = useParams<{ subject?: string }>();
-  const activeSlug = params.subject ?? (activeSubject ? toSlug(activeSubject) : null);
-
-  function handleSelect(subject: Subject) {
-    if (onSelect) {
-      onSelect(subject);
-    } else {
-      navigate(`/interview/${toSlug(subject)}`);
-    }
-  }
-
+export default function SubjectSelector({ onSelect, activeSubject }: Props) {
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row">
-      {/* Sidebar */}
-      <aside className="w-full lg:w-1/5 bg-gradient-to-b from-[#0a0a0a] to-black border-b lg:border-b-0 lg:border-r border-zinc-800/50 p-4 lg:p-6 flex flex-col">
-        <div className="flex items-center gap-3 mb-8">
-          <div className="w-12 h-12 bg-gradient-to-br from-[#667eea] to-[#764ba2] rounded-xl flex items-center justify-center shadow-lg shadow-purple-500/30">
-            <i className="fas fa-robot text-white text-xl" />
-          </div>
-          <span className="font-space font-bold text-2xl tracking-tight bg-gradient-to-r from-[#667eea] to-[#764ba2] bg-clip-text text-transparent">
-            AI Interview
-          </span>
-        </div>
+    <div className="animate-fade-in max-w-2xl mx-auto px-4 pt-28 pb-12">
+      {/* Header */}
+      <div className="text-center mb-10">
+        <p className="text-xs font-medium uppercase tracking-widest
+          text-[#4f46e5] mb-3">
+          Mock Technical Interview
+        </p>
+        <h1 className="text-3xl font-bold text-[#f0f0ff] mb-3 tracking-tight">
+          Choose Your Subject
+        </h1>
+        <p className="text-[#8b8ba8] text-sm max-w-sm mx-auto">
+          Select a core CSE subject to begin your placement interview session
+          with AI interviewer Natalie
+        </p>
+      </div>
 
-        <h3 className="text-gray-400 text-xs font-semibold uppercase tracking-widest mb-3">Select Topic</h3>
-
-        <div className="flex flex-row lg:flex-col gap-2 overflow-x-auto lg:overflow-x-visible pb-2 lg:pb-0">
-          {subjects.map(({ subject, icon, color }) => {
-            const slug = toSlug(subject);
-            const isActive = activeSlug === slug;
-            return (
-              <button
-                key={subject}
-                onClick={() => handleSelect(subject)}
-                className={`flex items-center gap-3 border rounded-xl p-3 transition-all duration-300 text-left whitespace-nowrap flex-shrink-0
-                  ${isActive
-                    ? 'bg-gradient-to-r from-[#667eea] to-[#764ba2] border-[#667eea] shadow-[0_0_20px_rgba(102,126,234,0.4)]'
-                    : 'bg-zinc-900/30 hover:bg-zinc-800/50 border-zinc-700/50 hover:border-zinc-500 hover:translate-x-1'
-                  }`}
-              >
-                <div className={`w-9 h-9 ${color} rounded-lg flex items-center justify-center`}>
-                  <i className={icon} />
-                </div>
-                <span className="font-medium text-sm text-white">{subject}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="mt-auto pt-6 hidden lg:block">
-          <p className="text-zinc-500 text-xs">Powered by AI</p>
-        </div>
-      </aside>
-
-      {/* Welcome main area — only shown on / route */}
-      <main className="flex-1 lg:w-4/5 flex flex-col bg-black">
-        <header className="px-4 lg:px-8 py-6 lg:py-8 border-b border-zinc-800/50">
-          <div className="text-center max-w-3xl mx-auto">
-            <h1 className="font-space font-bold text-3xl lg:text-5xl xl:text-6xl tracking-tight mb-3">
-              <span className="bg-gradient-to-r from-[#667eea] via-[#764ba2] to-[#f093fb] bg-clip-text text-transparent">
-                Master Your Interview
-              </span>
-            </h1>
-            <p className="text-gray-300 text-base lg:text-lg font-light">
-              Ace Your Technical Interviews with AI-Powered Practice and Feedback
-            </p>
-          </div>
-        </header>
-        <div className="flex-1 p-4 lg:p-8 overflow-y-auto">
-          <div className="h-full flex flex-col items-center justify-center text-center py-12">
-            <div className="w-24 h-24 lg:w-32 lg:h-32 bg-gradient-to-br from-zinc-800/50 to-zinc-900/50 rounded-full flex items-center justify-center mb-6 border border-zinc-700/30 shadow-[0_0_30px_rgba(102,126,234,0.2)]">
-              <i className="fas fa-microphone text-3xl lg:text-4xl text-zinc-400" />
-            </div>
-            <h2 className="font-space text-xl lg:text-3xl font-bold bg-gradient-to-r from-[#667eea] to-[#764ba2] bg-clip-text text-transparent mb-3">
-              Ready to Practice?
-            </h2>
-            <p className="text-gray-400 text-sm lg:text-base">Select a topic from the sidebar to begin</p>
-          </div>
-        </div>
-      </main>
+      {/* Subject grid */}
+      <div className="grid grid-cols-2 gap-4">
+        {SUBJECTS.map((subject) => {
+          const cfg = SUBJECT_CONFIG[subject];
+          const isActive = activeSubject === subject;
+          return (
+            <button
+              key={subject}
+              onClick={() => onSelect(subject)}
+              className={`relative text-left p-5 rounded-2xl border
+                transition-all duration-200 group
+                ${isActive
+                  ? `${cfg.bgClass} ${cfg.borderClass} shadow-lg`
+                  : 'bg-[#13131a] border-[#2a2a3d] hover:border-[#4f46e5] hover:bg-[#1c1c27]'}`}
+            >
+              {isActive && (
+                <div className={`absolute left-0 top-4 bottom-4 w-0.5
+                  rounded-full ${cfg.borderClass.replace('border-', 'bg-')}`} />
+              )}
+              <div className={`text-2xl mb-3 ${cfg.colorClass}`}>
+                <i className={cfg.icon} />
+              </div>
+              <div className="font-semibold text-[#f0f0ff] text-sm mb-1">
+                {subject}
+              </div>
+              <div className={`text-xs font-medium uppercase tracking-wider
+                ${isActive ? cfg.colorClass : 'text-[#4a4a6a]'}`}>
+                {cfg.short}
+              </div>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
