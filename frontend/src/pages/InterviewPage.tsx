@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 import { useParams, Navigate, useNavigate } from 'react-router-dom';
 import { subjectSlugs } from '../types/interview';
 import { useInterview } from '../hooks/useInterview';
@@ -8,16 +8,13 @@ export default function InterviewPage() {
   const { subject: slugParam } = useParams<{ subject: string }>();
   const navigate = useNavigate();
 
-  const subject = useMemo(
-    () => (slugParam ? subjectSlugs[slugParam] : undefined),
-    [slugParam]
-  );
-
+  const subject = slugParam ? subjectSlugs[slugParam] : undefined;
   const interview = useInterview();
 
-  // Set subject when URL changes
+  // Sync URL subject into interview state
   useEffect(() => {
-    if (subject && interview.currentSubject !== subject) {
+    if (!subject) return;
+    if (interview.currentSubject !== subject) {
       interview.selectSubject(subject);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
