@@ -1,6 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import NavBar from './components/layout/NavBar';
-import Sidebar from './components/layout/Sidebar';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import WelcomePage from './pages/WelcomePage';
 import InterviewPage from './pages/InterviewPage';
@@ -13,30 +12,26 @@ export default function App() {
       <NavBar />
 
       {/* Below the fixed navbar */}
-      <div className="pt-16 min-h-screen flex flex-col lg:flex-row">
-        <Sidebar />
+      <main className="pt-16 min-h-screen overflow-y-auto">
+        <ErrorBoundary>
+          <Routes>
+            {/* Root */}
+            <Route path="/" element={<Navigate to="/interview" replace />} />
 
-        <main className="flex-1 overflow-y-auto">
-          <ErrorBoundary>
-            <Routes>
-              {/* Root */}
-              <Route path="/" element={<Navigate to="/interview" replace />} />
+            {/* Interview routes */}
+            <Route path="/interview" element={<WelcomePage />} />
+            <Route path="/interview/:subject" element={<InterviewPage />} />
+            <Route path="/interview/:subject/feedback" element={<FeedbackPage />} />
 
-              {/* Interview routes */}
-              <Route path="/interview" element={<WelcomePage />} />
-              <Route path="/interview/:subject" element={<InterviewPage />} />
-              <Route path="/interview/:subject/feedback" element={<FeedbackPage />} />
+            {/* Notes routes */}
+            <Route path="/notes" element={<Navigate to="/notes/os" replace />} />
+            <Route path="/notes/:subject" element={<NotesSubjectPage />} />
 
-              {/* Notes routes */}
-              <Route path="/notes" element={<Navigate to="/notes/os" replace />} />
-              <Route path="/notes/:subject" element={<NotesSubjectPage />} />
-
-              {/* Fallback */}
-              <Route path="*" element={<Navigate to="/interview" replace />} />
-            </Routes>
-          </ErrorBoundary>
-        </main>
-      </div>
+            {/* Fallback */}
+            <Route path="*" element={<Navigate to="/interview" replace />} />
+          </Routes>
+        </ErrorBoundary>
+      </main>
     </div>
   );
 }

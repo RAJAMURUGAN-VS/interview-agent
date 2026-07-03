@@ -59,7 +59,7 @@ export default function InterviewPanel(props: Props) {
 
   // Active interview phase + welcome with subject selected
   return (
-    <div className="animate-fade-in max-w-2xl mx-auto px-4 pt-24 pb-12">
+    <div className="animate-fade-in">
 
       {/* Header row */}
       <div className="flex items-center justify-between mb-8">

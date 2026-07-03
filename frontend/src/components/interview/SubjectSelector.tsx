@@ -15,7 +15,7 @@ interface Props {
 
 export default function SubjectSelector({ onSelect, activeSubject }: Props) {
   return (
-    <div className="animate-fade-in max-w-2xl mx-auto px-4 pt-28 pb-12">
+    <div className="animate-fade-in">
       {/* Header */}
       <div className="text-center mb-10">
         <p className="text-xs font-medium uppercase tracking-widest
