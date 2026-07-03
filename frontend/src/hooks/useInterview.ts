@@ -5,9 +5,11 @@ import * as interviewApi from '../api/interviewApi';
 import { useAppStore } from '../store/appStore';
 import type { InterviewSubject, InterviewPhase, FeedbackData } from '../types';
 
-export function useInterview() {
+export function useInterview(initialSubject?: InterviewSubject) {
   const [phase, setPhase] = useState<InterviewPhase>('welcome');
-  const [currentSubject, setCurrentSubject] = useState<InterviewSubject | null>(null);
+  const [currentSubject, setCurrentSubject] = useState<InterviewSubject | null>(
+    initialSubject ?? null
+  );
   const [questionNumber, setQuestionNumber] = useState(1);
   const [recordingStatus, setRecordingStatus] = useState('Click Start Interview to begin');
   const [feedbackData, setFeedbackData] = useState<FeedbackData | null>(null);
