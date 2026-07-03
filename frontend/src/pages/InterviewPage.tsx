@@ -13,15 +13,14 @@ export default function InterviewPage() {
     [slugParam]
   );
 
-  const interview = useInterview();
+  const interview = useInterview(subject);
 
-  // Set subject when URL changes
+  // Sync URL subject changes to hook state
   useEffect(() => {
     if (subject && interview.currentSubject !== subject) {
       interview.selectSubject(subject);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subject]);
+  }, [subject, interview.currentSubject]);
 
   // Navigate to feedback URL when interview completes
   useEffect(() => {
@@ -53,3 +52,4 @@ export default function InterviewPage() {
     />
   );
 }
+

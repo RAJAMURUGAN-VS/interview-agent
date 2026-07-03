@@ -1,7 +1,5 @@
-import { useNavigate } from 'react-router-dom';
 import { SUBJECT_CONFIG } from '../ui/Badge';
 import type { InterviewSubject } from '../../types';
-import { toSlug } from '../../types/interview';
 
 const SUBJECTS: InterviewSubject[] = [
   'Operating System',
@@ -11,22 +9,11 @@ const SUBJECTS: InterviewSubject[] = [
 ];
 
 interface Props {
-  activeSubject?: InterviewSubject | null;
-  // Optional override — if provided, called instead of navigating
-  onSelect?: (subject: InterviewSubject) => void;
+  onSelect: (subject: InterviewSubject) => void;
+  activeSubject: InterviewSubject | null;
 }
 
-export default function SubjectSelector({ activeSubject, onSelect }: Props) {
-  const navigate = useNavigate();
-
-  function handleSelect(subject: InterviewSubject) {
-    if (onSelect) {
-      onSelect(subject);
-    } else {
-      navigate(`/interview/${toSlug(subject)}`);
-    }
-  }
-
+export default function SubjectSelector({ onSelect, activeSubject }: Props) {
   return (
     <div className="animate-fade-in max-w-2xl mx-auto px-4 pt-28 pb-12">
       {/* Header */}
@@ -52,7 +39,7 @@ export default function SubjectSelector({ activeSubject, onSelect }: Props) {
           return (
             <button
               key={subject}
-              onClick={() => handleSelect(subject)}
+              onClick={() => onSelect(subject)}
               className={`relative text-left p-5 rounded-2xl border
                 transition-all duration-200 group
                 ${isActive

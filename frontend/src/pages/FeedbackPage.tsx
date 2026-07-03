@@ -7,6 +7,7 @@ import FeedbackSection from '../components/feedback/FeedbackSection';
 export default function FeedbackPage() {
   const { subject: slugParam } = useParams<{ subject: string }>();
   const navigate = useNavigate();
+
   const subject = slugParam ? subjectSlugs[slugParam] : undefined;
   const interview = useInterview();
 
