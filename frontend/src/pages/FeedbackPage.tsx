@@ -3,6 +3,7 @@ import { useParams, Navigate, useNavigate } from 'react-router-dom';
 import { subjectSlugs } from '../types/interview';
 import { useInterview } from '../hooks/useInterview';
 import FeedbackSection from '../components/feedback/FeedbackSection';
+import InterviewSubjectTabs from '../components/interview/InterviewSubjectTabs';
 
 export default function FeedbackPage() {
   const { subject: slugParam } = useParams<{ subject: string }>();
@@ -28,11 +29,18 @@ export default function FeedbackPage() {
   }
 
   return (
-    <FeedbackSection
-      isFeedbackLoading={interview.isFeedbackLoading}
-      feedbackData={interview.feedbackData}
-      onGetFeedback={interview.getFeedback}
-      onNewInterview={handleNewInterview}
-    />
+    <div className="animate-fade-in max-w-2xl mx-auto px-4 pt-8 pb-12">
+      {/* Subject tabs */}
+      <div className="mb-6">
+        <InterviewSubjectTabs activeSubject={interview.currentSubject} />
+      </div>
+
+      <FeedbackSection
+        isFeedbackLoading={interview.isFeedbackLoading}
+        feedbackData={interview.feedbackData}
+        onGetFeedback={interview.getFeedback}
+        onNewInterview={handleNewInterview}
+      />
+    </div>
   );
 }

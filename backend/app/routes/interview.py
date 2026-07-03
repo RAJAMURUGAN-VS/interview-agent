@@ -1,8 +1,9 @@
-from flask import Blueprint, request, Response
+from flask import Blueprint, request, Response, jsonify
 from ..services import agent_service, stt_service, tts_service
 from ..utils.prompts import INTERVIEW_PROMPT
 import os
 import tempfile
+import traceback
 
 bp = Blueprint('interview', __name__)
 
@@ -29,38 +30,39 @@ def start_interview():
 @bp.route("/submit-answer", methods=["POST"])
 def submit_answer():
     """Process user's answer and generate next question"""
-    audio_file = request.files["audio"]
+    try:
+        audio_file = request.files["audio"]
 
-    temp_path = tempfile.NamedTemporaryFile(delete=False, suffix=".webm").name
-    audio_file.save(temp_path)
+        temp_path = tempfile.NamedTemporaryFile(delete=False, suffix=".webm").name
+        audio_file.save(temp_path)
 
-    answer = stt_service.speech_to_text(temp_path)
-    os.unlink(temp_path)
+        answer = stt_service.speech_to_text(temp_path)
+        os.unlink(temp_path)
 
-    if not answer or answer.strip() == "":
-        answer = "[Candidate provided a verbal response]"
+        if not answer or answer.strip() == "":
+            answer = "[Candidate provided a verbal response]"
 
-    config = {"configurable": {"thread_id": agent_service.session.thread_id}}
+        config = {"configurable": {"thread_id": agent_service.session.thread_id}}
 
-    agent_service.invoke_agent({"messages": [{"role": "user", "content": answer}]}, config)
+        agent_service.invoke_agent({"messages": [{"role": "user", "content": answer}]}, config)
 
-    if agent_service.session.question_count >= 5:
-        response = agent_service.invoke_agent({
-            "messages": [{"role": "user", "content": "That was the 5th question. Briefly acknowledge their ACTUAL answer and let them know the interview is complete. Keep it SHORT."}]
-        }, config)
+        if agent_service.session.question_count >= 5:
+            response = agent_service.invoke_agent({
+                "messages": [{"role": "user", "content": "That was the 5th question. Briefly acknowledge their ACTUAL answer and let them know the interview is complete. Keep it SHORT."}]
+            }, config)
 
-        closing_message = response["messages"][-1].content
-        print(f"\n[Closing] {closing_message}")
+            closing_message = response["messages"][-1].content
+            print(f"\n[Closing] {closing_message}")
 
-        return Response(
-            tts_service.stream_audio(closing_message),
-            mimetype='text/plain',
-            headers={'X-Interview-Complete': 'true'}
-        )
+            return Response(
+                tts_service.stream_audio(closing_message),
+                mimetype='text/plain',
+                headers={'X-Interview-Complete': 'true'}
+            )
 
-    agent_service.session.question_count += 1
+        agent_service.session.question_count += 1
 
-    prompt = f"""The candidate just answered question {agent_service.session.question_count - 1}.
+        prompt = f"""The candidate just answered question {agent_service.session.question_count - 1}.
 
 Look at their ACTUAL answer above. Do NOT assume or make up what they said.
 
@@ -72,13 +74,17 @@ Now ask question {agent_service.session.question_count} of 5:
 
 Be conversational but CONCISE. Only reference what they truly said."""
 
-    response = agent_service.invoke_agent({"messages": [{"role": "user", "content": prompt}]}, config)
+        response = agent_service.invoke_agent({"messages": [{"role": "user", "content": prompt}]}, config)
 
-    question = response["messages"][-1].content
-    print(f"\n[Question {agent_service.session.question_count}] {question}")
+        question = response["messages"][-1].content
+        print(f"\n[Question {agent_service.session.question_count}] {question}")
 
-    return Response(
-        tts_service.stream_audio(question),
-        mimetype='text/plain',
-        headers={'X-Question-Number': str(agent_service.session.question_count)}
-    )
+        return Response(
+            tts_service.stream_audio(question),
+            mimetype='text/plain',
+            headers={'X-Question-Number': str(agent_service.session.question_count)}
+        )
+    except Exception as e:
+        print(f"ERROR in submit_answer: {e}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500

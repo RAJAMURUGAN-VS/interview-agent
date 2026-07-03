@@ -13,7 +13,7 @@ export default function FeedbackSection({
   isFeedbackLoading, feedbackData, onGetFeedback, onNewInterview
 }: Props) {
   return (
-    <div className="animate-fade-in max-w-2xl mx-auto px-4 pt-24 pb-12">
+    <div className="animate-fade-in">
 
       <div className="text-center mb-8">
         <p className="text-xs uppercase tracking-widest text-[#4f46e5]

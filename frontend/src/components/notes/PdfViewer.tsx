@@ -37,30 +37,6 @@ export default function PdfViewer({ pdfPath }: Props) {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* PDF canvas */}
-      <div
-        className="card p-4 flex justify-center overflow-auto"
-        onContextMenu={(e) => e.preventDefault()}
-      >
-        <Document
-          file={pdfPath}
-          onLoadSuccess={onLoadSuccess}
-          onLoadError={onLoadError}
-          loading={
-            <div className="flex items-center justify-center h-48">
-              <p className="text-[#8b8ba8] text-sm">Loading notes…</p>
-            </div>
-          }
-        >
-          <Page
-            pageNumber={pageNumber}
-            width={Math.min(window.innerWidth - 80, 700)}
-            renderTextLayer={false}
-            renderAnnotationLayer={false}
-          />
-        </Document>
-      </div>
-
       {/* Pagination */}
       {numPages && numPages > 1 && (
         <div className="flex items-center justify-center gap-4">
@@ -93,6 +69,30 @@ export default function PdfViewer({ pdfPath }: Props) {
           </button>
         </div>
       )}
+      
+      {/* PDF canvas */}
+      <div
+        className="card p-4 flex justify-center overflow-auto"
+        onContextMenu={(e) => e.preventDefault()}
+      >
+        <Document
+          file={pdfPath}
+          onLoadSuccess={onLoadSuccess}
+          onLoadError={onLoadError}
+          loading={
+            <div className="flex items-center justify-center h-48">
+              <p className="text-[#8b8ba8] text-sm">Loading notes…</p>
+            </div>
+          }
+        >
+          <Page
+            pageNumber={pageNumber}
+            width={Math.min(window.innerWidth - 80, 700)}
+            renderTextLayer={false}
+            renderAnnotationLayer={false}
+          />
+        </Document>
+      </div>
     </div>
   );
 }
