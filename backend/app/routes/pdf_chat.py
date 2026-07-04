@@ -3,126 +3,154 @@ import tempfile
 
 from flask import Blueprint, request, jsonify, Response
 
-from ..services.rag_service import build_rag_pipeline, query_rag
+from ..services.rag_service import (
+    get_or_build_vector_store,
+    retrieve_context,
+    build_answer,
+    create_session,
+    clear_session,
+    _cached_vector_stores,
+    _session_threads,
+)
 from ..services.stt_service import speech_to_text
 from ..services.tts_service import stream_audio
+from ..services.agent_service import model
 
-bp = Blueprint("pdf_chat", __name__, url_prefix="/pdf-chat")
+bp = Blueprint("pdf_chat", __name__)
 
 
-@bp.route("/upload", methods=["POST"])
+@bp.route("/pdf-chat/upload", methods=["POST"])
 def upload_pdf():
     """
-    POST /pdf-chat/upload
-    Accept multipart/form-data with field 'pdf'.
-    Returns {"session_id": "<hex>"} on success.
+    Accept a PDF upload, build its vector store, create a LangGraph
+    session thread, and return the thread_id to the frontend.
     """
-    # Validate file presence
     if "pdf" not in request.files:
-        return jsonify({"error": "No file provided. Send a PDF with field name 'pdf'."}), 400
+        return jsonify({"success": False, "error": "No PDF file provided"}), 400
 
-    file = request.files["pdf"]
+    pdf_file = request.files["pdf"]
 
-    # Validate file extension
-    if not file.filename or not file.filename.lower().endswith(".pdf"):
-        return jsonify({"error": "Invalid file type. Only .pdf files are accepted."}), 400
+    if not pdf_file.filename or not pdf_file.filename.lower().endswith(".pdf"):
+        return jsonify({"success": False, "error": "File must be a PDF"}), 400
+
+    file_bytes = pdf_file.read()
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        tmp.write(file_bytes)
+        tmp_path = tmp.name
 
     try:
-        file_bytes = file.read()
-        session_id = build_rag_pipeline(file_bytes)
-        return jsonify({"session_id": session_id}), 200
+        _, file_hash = get_or_build_vector_store(tmp_path, file_bytes)
+        thread_id = create_session(file_hash, model)
+        return jsonify({
+            "success": True,
+            "thread_id": thread_id,
+            "file_hash": file_hash,
+        })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
+    finally:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
 
 
-@bp.route("/ask-text", methods=["POST"])
+@bp.route("/pdf-chat/ask-text", methods=["POST"])
 def ask_text():
     """
-    POST /pdf-chat/ask-text
-    Accept JSON body {"session_id": "...", "question": "..."}.
-    Returns {"answer": "...", "sources": [...]}.
+    Accept a text question and thread_id.
+    Retrieve context from the vector store and invoke the LangGraph agent.
     """
-    data = request.get_json(silent=True)
+    data = request.json or {}
+    thread_id = data.get("thread_id", "").strip()
+    question = data.get("question", "").strip()
 
-    if not data:
-        return jsonify({"error": "Request body must be JSON."}), 400
+    if not thread_id or not question:
+        return jsonify({"success": False,
+                        "error": "Missing thread_id or question"}), 400
 
-    session_id = data.get("session_id")
-    question = data.get("question")
+    # Resolve which file hash this thread belongs to
+    file_hash = next(
+        (fh for fh, tid in _session_threads.items() if tid == thread_id),
+        None,
+    )
+    if not file_hash:
+        return jsonify({"success": False,
+                        "error": "Session not found. Please re-upload the PDF."}), 404
 
-    # Validate required fields
-    if not session_id:
-        return jsonify({"error": "Missing required field: 'session_id'."}), 400
-
-    if not question or not question.strip():
-        return jsonify({"error": "Question must not be empty."}), 400
+    vector_store = _cached_vector_stores.get(file_hash)
+    if not vector_store:
+        return jsonify({"success": False,
+                        "error": "Vector store not found. Please re-upload the PDF."}), 404
 
     try:
-        result = query_rag(session_id, question)
-        return jsonify({"answer": result["answer"], "sources": result["sources"]}), 200
-    except KeyError as e:
-        return jsonify({"error": "Session not found. Please upload a PDF first."}), 400
+        context, source_docs = retrieve_context(vector_store, question, k=5)
+        answer = build_answer(thread_id, context, question, source_docs)
+        return jsonify({"success": True, "answer": answer})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
-@bp.route("/ask-speech", methods=["POST"])
+@bp.route("/pdf-chat/ask-speech", methods=["POST"])
 def ask_speech():
     """
-    POST /pdf-chat/ask-speech
-    Accept multipart/form-data with fields 'audio' and 'session_id'.
-    Returns streaming audio body with X-Answer-Text header.
+    Accept an audio file and thread_id.
+    Transcribe (STT), retrieve context, invoke LangGraph agent, stream TTS.
     """
-    # Validate fields
     if "audio" not in request.files:
-        return jsonify({"error": "No audio file provided. Send audio with field name 'audio'."}), 400
+        return jsonify({"success": False, "error": "No audio file provided"}), 400
 
-    session_id = request.form.get("session_id")
-    if not session_id:
-        return jsonify({"error": "Missing required field: 'session_id'."}), 400
+    thread_id = request.form.get("thread_id", "").strip()
+    if not thread_id:
+        return jsonify({"success": False, "error": "Missing thread_id"}), 400
+
+    file_hash = next(
+        (fh for fh, tid in _session_threads.items() if tid == thread_id),
+        None,
+    )
+    if not file_hash:
+        return jsonify({"success": False,
+                        "error": "Session not found. Please re-upload the PDF."}), 404
+
+    vector_store = _cached_vector_stores.get(file_hash)
+    if not vector_store:
+        return jsonify({"success": False, "error": "Vector store not found."}), 404
 
     audio_file = request.files["audio"]
-
-    # Save audio to a temp file for STT processing
     tmp_audio_fd, tmp_audio_path = tempfile.mkstemp(suffix=".webm")
     try:
         with os.fdopen(tmp_audio_fd, "wb") as f:
             audio_file.save(f)
-
-        # Transcribe audio to text
-        transcript = speech_to_text(tmp_audio_path)
+        question = speech_to_text(tmp_audio_path)
+        if not question or not question.strip():
+            question = "Please summarise the document."
     finally:
         if os.path.exists(tmp_audio_path):
             os.unlink(tmp_audio_path)
 
-    # Handle empty STT transcript gracefully
-    if not transcript or not transcript.strip():
-        return jsonify({"error": "Could not transcribe audio. Please try again."}), 400
-
-    # Query RAG with the transcribed question
     try:
-        result = query_rag(session_id, transcript)
-    except KeyError:
-        return jsonify({"error": "Session not found. Please upload a PDF first."}), 400
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-    answer = result["answer"]
-    sources = result["sources"]
-
-    # Build X-Answer-Text header value: answer with sources appended if present
-    if sources:
-        sources_str = ", ".join(str(p) for p in sources)
-        answer_header = f"{answer} [Sources: pages {sources_str}]"
-    else:
-        answer_header = answer
-
-    # Stream TTS audio response with answer in header
-    try:
+        context, source_docs = retrieve_context(vector_store, question, k=5)
+        answer = build_answer(thread_id, context, question, source_docs)
+        spoken_answer = answer.split("\n\n📄 Sources:")[0]
         return Response(
-            stream_audio(answer),
+            stream_audio(spoken_answer),
             mimetype="text/plain",
-            headers={"X-Answer-Text": answer_header},
+            headers={"X-Answer-Text": answer},
         )
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@bp.route("/pdf-chat/session", methods=["DELETE"])
+def delete_session():
+    """
+    Called when the user closes a PDF tab.
+    Clears the agent, vector store, and thread mapping from memory.
+    """
+    data = request.json or {}
+    thread_id = data.get("thread_id", "").strip()
+
+    if not thread_id:
+        return jsonify({"success": False, "error": "Missing thread_id"}), 400
+
+    clear_session(thread_id)
+    return jsonify({"success": True})

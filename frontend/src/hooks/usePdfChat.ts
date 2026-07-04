@@ -1,195 +1,182 @@
 import { useState, useCallback } from 'react';
-import type { PdfChatMessage, ChatMode } from '../types';
-import { uploadPdf, askText, askSpeech } from '../api/pdfChatApi';
+import type { PdfTab, PdfChatMessage, ChatMode } from '../types';
+import { uploadPdf, askText, askSpeech, deleteSession } from '../api/pdfChatApi';
 import { useAudioStream } from './useAudioStream';
 import { useMediaRecorder } from './useMediaRecorder';
 
 export function usePdfChat() {
-  // Core state
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<PdfChatMessage[]>([]);
-  const [mode, setMode] = useState<ChatMode>('text');
-  const [fileName, setFileName] = useState<string>('');
+  // ── Tab state ────────────────────────────────────────────────────────────
+  const [tabs, setTabs]                     = useState<PdfTab[]>([]);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
 
-  // Upload state
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
+  // ── Upload panel state ───────────────────────────────────────────────────
+  const [showUploadPanel, setShowUploadPanel] = useState(false);
+  const [isUploading, setIsUploading]         = useState(false);
+  const [uploadError, setUploadError]         = useState<string | null>(null);
 
-  // Ask state
-  const [isAsking, setIsAsking] = useState(false);
+  // ── Chat input state ─────────────────────────────────────────────────────
+  const [mode, setMode]           = useState<ChatMode>('text');
   const [textInput, setTextInput] = useState('');
+  const [isAsking, setIsAsking]   = useState(false);
 
-  // Audio hooks
-  const { isSpeaking, playStream } = useAudioStream();
-  const { isRecording, recordedBlob, startRecording, stopRecording } = useMediaRecorder();
+  const { isSpeaking, playStream }  = useAudioStream();
+  const { isRecording, recordedBlob, startRecording, stopRecording } =
+    useMediaRecorder();
 
-  /**
-   * Upload a PDF file and initialize a new session.
-   * Clears previous messages and resets mode to 'text'.
-   */
+  // ── Derived: active tab object ───────────────────────────────────────────
+  const activeTab = tabs.find((t) => t.threadId === activeThreadId) ?? null;
+
+  // ── Helper: append a message to a specific tab ───────────────────────────
+  const appendMessage = useCallback(
+    (threadId: string, role: 'user' | 'assistant', text: string) => {
+      const newMessage: PdfChatMessage = {
+        id: crypto.randomUUID(),
+        role,
+        text,
+      };
+      setTabs((prev) =>
+        prev.map((tab) =>
+          tab.threadId === threadId
+            ? { ...tab, messages: [...tab.messages, newMessage] }
+            : tab,
+        ),
+      );
+    },
+    [],
+  );
+
+  // ── Upload a new PDF → create new tab ────────────────────────────────────
   const handleUpload = useCallback(async (file: File) => {
     setIsUploading(true);
     setUploadError(null);
 
-    try {
-      const response = await uploadPdf(file);
-      
-      if (response.session_id) {
-        setSessionId(response.session_id);
-        setFileName(file.name);
-        setMessages([]);
-        setMode('text');
-        setUploadError(null);
-      } else {
-        setUploadError(response.error || 'Upload failed');
-      }
-    } catch (error) {
-      setUploadError(error instanceof Error ? error.message : 'Upload failed');
-    } finally {
-      setIsUploading(false);
+    const result = await uploadPdf(file);
+    setIsUploading(false);
+
+    if (!result.success || !result.thread_id || !result.file_hash) {
+      setUploadError(result.error ?? 'Upload failed. Please try again.');
+      return;
     }
+
+    const newTab: PdfTab = {
+      threadId: result.thread_id,
+      fileHash: result.file_hash,
+      fileName: file.name,
+      messages: [],
+    };
+
+    setTabs((prev) => [...prev, newTab]);
+    setActiveThreadId(result.thread_id);
+    setShowUploadPanel(false); // collapse upload area after success
+    setUploadError(null);
   }, []);
 
-  /**
-   * Submit a text question to the RAG pipeline.
-   * Appends user and assistant messages to the chat history.
-   */
+  // ── Switch active tab ─────────────────────────────────────────────────────
+  const handleSelectTab = useCallback((threadId: string) => {
+    setActiveThreadId(threadId);
+    setShowUploadPanel(false);
+    setTextInput('');
+  }, []);
+
+  // ── Close a tab ───────────────────────────────────────────────────────────
+  const handleCloseTab = useCallback(
+    (threadId: string) => {
+      // Tell backend to free memory — fire and forget
+      deleteSession(threadId);
+
+      setTabs((prev) => {
+        const remaining = prev.filter((t) => t.threadId !== threadId);
+
+        // Determine next active tab
+        if (activeThreadId === threadId) {
+          const closedIndex = prev.findIndex((t) => t.threadId === threadId);
+          const nextTab =
+            remaining[closedIndex] ??     // tab to the right
+            remaining[closedIndex - 1] ?? // tab to the left
+            null;
+          setActiveThreadId(nextTab?.threadId ?? null);
+        }
+
+        return remaining;
+      });
+    },
+    [activeThreadId],
+  );
+
+  // ── Open upload panel (from "+ Add PDF" button) ───────────────────────────
+  const handleShowUploadPanel = useCallback(() => {
+    setShowUploadPanel(true);
+    setUploadError(null);
+    setActiveThreadId(null); // deselect current tab while uploading
+  }, []);
+
+  // ── Ask: text mode ────────────────────────────────────────────────────────
   const handleAskText = useCallback(async () => {
-    if (!sessionId || !textInput.trim()) return;
+    if (!activeTab || !textInput.trim() || isAsking) return;
 
     const question = textInput.trim();
+    const { threadId } = activeTab;
     setTextInput('');
+    appendMessage(threadId, 'user', question);
     setIsAsking(true);
 
-    // Append user message
-    const userMessage: PdfChatMessage = {
-      id: crypto.randomUUID(),
-      role: 'user',
-      text: question,
-    };
-    setMessages((prev) => [...prev, userMessage]);
+    const result = await askText(threadId, question);
+    setIsAsking(false);
 
-    try {
-      const response = await askText(sessionId, question);
+    appendMessage(
+      threadId,
+      'assistant',
+      result.success && result.answer
+        ? result.answer
+        : result.error ?? 'Something went wrong. Please try again.',
+    );
+  }, [activeTab, textInput, isAsking, appendMessage]);
 
-      if (response.answer) {
-        const assistantMessage: PdfChatMessage = {
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          text: response.answer,
-          sources: response.sources || [],
-        };
-        setMessages((prev) => [...prev, assistantMessage]);
-      } else {
-        const errorMessage: PdfChatMessage = {
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          text: response.error || 'Failed to get answer',
-          sources: [],
-        };
-        setMessages((prev) => [...prev, errorMessage]);
-      }
-    } catch (error) {
-      const errorMessage: PdfChatMessage = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        text: error instanceof Error ? error.message : 'Failed to get answer',
-        sources: [],
-      };
-      setMessages((prev) => [...prev, errorMessage]);
-    } finally {
-      setIsAsking(false);
-    }
-  }, [sessionId, textInput]);
-
-  /**
-   * Submit a recorded speech question to the RAG pipeline.
-   * Streams audio response and displays the answer text with sources.
-   */
+  // ── Ask: speech mode ──────────────────────────────────────────────────────
   const handleSubmitSpeech = useCallback(async () => {
-    if (!sessionId || !recordedBlob) return;
+    if (!activeTab || !recordedBlob || isAsking) return;
 
+    const { threadId } = activeTab;
     setIsAsking(true);
+    appendMessage(threadId, 'user', '🎤 Voice question');
 
-    // Append user message with voice indicator
-    const userMessage: PdfChatMessage = {
-      id: crypto.randomUUID(),
-      role: 'user',
-      text: '🎤 Voice question',
-    };
-    setMessages((prev) => [...prev, userMessage]);
+    const { response, answerText } = await askSpeech(threadId, recordedBlob);
 
-    try {
-      const response = await askSpeech(sessionId, recordedBlob);
-
-      // Extract answer text from header
-      const answerText = response.headers.get('X-Answer-Text') || 'No answer received';
-      
-      // Extract sources from header if present
-      const sourcesHeader = response.headers.get('X-Answer-Sources');
-      const sources = sourcesHeader ? JSON.parse(sourcesHeader) : [];
-
-      // Append assistant message with answer text and sources
-      const assistantMessage: PdfChatMessage = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        text: answerText,
-        sources: sources,
-      };
-      setMessages((prev) => [...prev, assistantMessage]);
-
-      // Play the audio stream
-      await playStream(response);
-    } catch (error) {
-      const errorMessage: PdfChatMessage = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        text: error instanceof Error ? error.message : 'Failed to process speech question',
-        sources: [],
-      };
-      setMessages((prev) => [...prev, errorMessage]);
-    } finally {
-      setIsAsking(false);
+    if (answerText) {
+      appendMessage(threadId, 'assistant', answerText);
     }
-  }, [sessionId, recordedBlob, playStream]);
 
-  /**
-   * Reset the entire chat session.
-   * Clears session ID, messages, errors, and resets mode to 'text'.
-   */
-  const handleReset = useCallback(() => {
-    setSessionId(null);
-    setMessages([]);
-    setMode('text');
-    setFileName('');
-    setUploadError(null);
-    setTextInput('');
-  }, []);
+    playStream(response);
+    setIsAsking(false);
+  }, [activeTab, recordedBlob, isAsking, appendMessage, playStream]);
 
   return {
-    // State
-    sessionId,
+    // Tab state
+    tabs,
+    activeThreadId,
+    activeTab,
+    // Upload panel
+    showUploadPanel,
     isUploading,
     uploadError,
-    messages,
+    // Chat input
     mode,
     textInput,
     isAsking,
     isSpeaking,
     isRecording,
     recordedBlob,
-    fileName,
-
     // Setters
     setMode,
     setTextInput,
-
     // Actions
     handleUpload,
+    handleSelectTab,
+    handleCloseTab,
+    handleShowUploadPanel,
     handleAskText,
     handleSubmitSpeech,
     startRecording,
     stopRecording,
-    handleReset,
   };
 }

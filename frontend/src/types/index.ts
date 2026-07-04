@@ -39,12 +39,22 @@ export interface PdfChatMessage {
   sources?: number[];
 }
 
+export interface PdfTab {
+  threadId: string;
+  fileHash: string;
+  fileName: string;
+  messages: PdfChatMessage[];
+}
+
 export interface UploadResponse {
-  session_id?: string;
+  success?: boolean;
+  thread_id?: string;
+  file_hash?: string;
   error?: string;
 }
 
 export interface AskTextResponse {
+  success?: boolean;
   answer?: string;
   sources?: number[];
   error?: string;

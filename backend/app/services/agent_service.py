@@ -28,7 +28,7 @@ def reset_agent(subject: str):
     session.current_subject = subject
     session.question_count = 1
     checkpointer = InMemorySaver()
-    agent = create_agent(
+    agenilt = create_agent(
         model=model,
         tools=[],
         checkpointer=checkpointer

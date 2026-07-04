@@ -21,7 +21,11 @@ export default function UploadArea({
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) onFileSelect(file);
+    if (file) {
+      // Reset input value so selecting the same file again fires onChange
+      e.target.value = '';
+      onFileSelect(file);
+    }
   };
 
   // Loaded state
