@@ -7,7 +7,7 @@ export type InterviewSubject =
 
 export type NotesSubject = 'OS' | 'OOP' | 'DBMS' | 'CN';
 
-export type AppTab = 'interview' | 'notes';
+export type AppTab = 'interview' | 'notes' | 'pdf-chat';
 
 export type InterviewPhase = 'welcome' | 'active' | 'feedback';
 
@@ -26,4 +26,26 @@ export interface SubmitAnswerMeta {
 export interface FeedbackResponse {
   success: boolean;
   feedback: FeedbackData;
+}
+
+// ── PDF Chat ──────────────────────────────────────────
+
+export type ChatMode = 'text' | 'speech';
+
+export interface PdfChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+  sources?: number[];
+}
+
+export interface UploadResponse {
+  session_id?: string;
+  error?: string;
+}
+
+export interface AskTextResponse {
+  answer?: string;
+  sources?: number[];
+  error?: string;
 }

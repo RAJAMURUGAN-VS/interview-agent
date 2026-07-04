@@ -14,8 +14,9 @@ def create_app():
         print(f"ERROR: Missing required env vars: {', '.join(missing)}")
         sys.exit(1)
 
-    CORS(app, expose_headers=['X-Question-Number', 'X-Interview-Complete'])
-    from .routes import interview, feedback
+    CORS(app, expose_headers=['X-Question-Number', 'X-Interview-Complete', 'X-Answer-Text'])
+    from .routes import interview, feedback, pdf_chat
     app.register_blueprint(interview.bp)
     app.register_blueprint(feedback.bp)
+    app.register_blueprint(pdf_chat.bp)
     return app

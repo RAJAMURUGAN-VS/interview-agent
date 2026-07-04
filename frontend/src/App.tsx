@@ -5,6 +5,7 @@ import WelcomePage from './pages/WelcomePage';
 import InterviewPage from './pages/InterviewPage';
 import FeedbackPage from './pages/FeedbackPage';
 import NotesSubjectPage from './pages/NotesSubjectPage';
+import PdfChatPage from './pages/PdfChatPage';
 
 export default function App() {
   return (
@@ -26,6 +27,9 @@ export default function App() {
             {/* Notes routes */}
             <Route path="/notes" element={<Navigate to="/notes/os" replace />} />
             <Route path="/notes/:subject" element={<NotesSubjectPage />} />
+
+            {/* PDF Chat route */}
+            <Route path="/pdf-chat" element={<PdfChatPage />} />
 
             {/* Fallback */}
             <Route path="*" element={<Navigate to="/interview" replace />} />
