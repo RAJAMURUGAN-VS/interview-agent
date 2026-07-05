@@ -22,6 +22,7 @@ interface Props {
   onPauseAudio: () => void;
   onResumeAudio: () => void;
   onStopAudio: () => void;
+  onStreamingComplete?: (id: string) => void;
 }
 
 export default function ChatWindow({
@@ -29,11 +30,41 @@ export default function ChatWindow({
   recordedBlob, onModeChange, onTextChange, onAskText,
   onStartRecording, onStopRecording, onSubmitSpeech,
   onPauseAudio, onResumeAudio, onStopAudio,
+  onStreamingComplete,
 }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const scrolledMessageIdRef = useRef<string | null>(null);
+  const prevMessagesCountRef = useRef(messages.length);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (!containerRef.current) return;
+
+    const currentCount = messages.length;
+    const prevCount = prevMessagesCountRef.current;
+    prevMessagesCountRef.current = currentCount;
+
+    if (currentCount === 0) return;
+
+    const lastMessage = messages[currentCount - 1];
+
+    if (currentCount > prevCount) {
+      if (lastMessage.role === 'user') {
+        // User message: scroll all the way to the bottom
+        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      } else if (lastMessage.role === 'assistant' && lastMessage.id !== scrolledMessageIdRef.current) {
+        // Assistant message: scroll the top of this message into view once when it starts
+        scrolledMessageIdRef.current = lastMessage.id;
+        
+        setTimeout(() => {
+          const items = containerRef.current?.querySelectorAll('.message-item');
+          if (items && items.length > 0) {
+            const lastItem = items[items.length - 1] as HTMLElement;
+            lastItem.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        }, 80);
+      }
+    }
   }, [messages]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -56,6 +87,7 @@ export default function ChatWindow({
 
       {/* Message list */}
       <div
+        ref={containerRef}
         className="flex-1 overflow-y-auto flex flex-col gap-4 pr-1"
         style={{ maxHeight: '320px' }}
       >
@@ -69,7 +101,9 @@ export default function ChatWindow({
           </div>
         )}
         {messages.map((msg) => (
-          <ChatMessage key={msg.id} message={msg} />
+          <div key={msg.id} className="message-item">
+            <ChatMessage message={msg} onStreamingComplete={onStreamingComplete} />
+          </div>
         ))}
         {isAsking && (
           <div className="flex gap-3 animate-fade-in">

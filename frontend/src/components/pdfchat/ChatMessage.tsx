@@ -1,10 +1,12 @@
 import type { PdfChatMessage } from '../../types';
+import StreamingMarkdown from './StreamingMarkdown';
 
 interface Props {
   message: PdfChatMessage;
+  onStreamingComplete?: (id: string) => void;
 }
 
-export default function ChatMessage({ message }: Props) {
+export default function ChatMessage({ message, onStreamingComplete }: Props) {
   const isUser = message.role === 'user';
 
   return (
@@ -41,7 +43,15 @@ export default function ChatMessage({ message }: Props) {
               : 'bg-[#1c1c27] border border-[#2a2a3d] text-[#8b8ba8] rounded-2xl rounded-tl-sm px-4 py-2.5'
           }
         >
-          <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.text}</p>
+          {isUser ? (
+            <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.text}</p>
+          ) : (
+            <StreamingMarkdown
+              content={message.text}
+              isStreamingActive={!!message.isStreaming}
+              onComplete={() => onStreamingComplete?.(message.id)}
+            />
+          )}
         </div>
 
         {/* Citation badges — only on assistant messages with sources */}

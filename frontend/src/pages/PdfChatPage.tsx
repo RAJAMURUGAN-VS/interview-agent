@@ -13,6 +13,7 @@ export default function PdfChatPage() {
     handleAskText, handleSubmitSpeech,
     startRecording, stopRecording,
     pauseAudio, resumeAudio, stopAudio,
+    markMessageStreamingComplete,
   } = usePdfChat();
 
   return (
@@ -95,6 +96,11 @@ export default function PdfChatPage() {
             onPauseAudio={pauseAudio}
             onResumeAudio={resumeAudio}
             onStopAudio={stopAudio}
+            onStreamingComplete={(msgId) => {
+              if (activeTab.threadId) {
+                markMessageStreamingComplete(activeTab.threadId, msgId);
+              }
+            }}
           />
         )}
       </div>

@@ -37,6 +37,7 @@ export interface PdfChatMessage {
   role: 'user' | 'assistant';
   text: string;
   sources?: number[];
+  isStreaming?: boolean;
 }
 
 export interface PdfTab {

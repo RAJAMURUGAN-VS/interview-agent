@@ -28,11 +28,13 @@ export function usePdfChat() {
 
   // ── Helper: append a message to a specific tab ───────────────────────────
   const appendMessage = useCallback(
-    (threadId: string, role: 'user' | 'assistant', text: string) => {
+    (threadId: string, role: 'user' | 'assistant', text: string, sources?: number[], isStreaming?: boolean) => {
       const newMessage: PdfChatMessage = {
         id: crypto.randomUUID(),
         role,
         text,
+        sources,
+        isStreaming,
       };
       setTabs((prev) =>
         prev.map((tab) =>
@@ -44,6 +46,21 @@ export function usePdfChat() {
     },
     [],
   );
+
+  const markMessageStreamingComplete = useCallback((threadId: string, messageId: string) => {
+    setTabs((prev) =>
+      prev.map((tab) =>
+        tab.threadId === threadId
+          ? {
+              ...tab,
+              messages: tab.messages.map((msg) =>
+                msg.id === messageId ? { ...msg, isStreaming: false } : msg
+              ),
+            }
+          : tab
+      )
+    );
+  }, []);
 
   // ── Upload a new PDF → create new tab ────────────────────────────────────
   const handleUpload = useCallback(async (file: File) => {
@@ -123,13 +140,15 @@ export function usePdfChat() {
     const result = await askText(threadId, question);
     setIsAsking(false);
 
-    appendMessage(
-      threadId,
-      'assistant',
-      result.success && result.answer
-        ? result.answer
-        : result.error ?? 'Something went wrong. Please try again.',
-    );
+    if (result.success && result.answer) {
+      appendMessage(threadId, 'assistant', result.answer, result.sources, true);
+    } else {
+      appendMessage(
+        threadId,
+        'assistant',
+        result.error ?? 'Something went wrong. Please try again.',
+      );
+    }
   }, [activeTab, textInput, isAsking, appendMessage]);
 
   // ── Ask: speech mode — two-step pipeline ─────────────────────────────────
@@ -173,7 +192,7 @@ export function usePdfChat() {
         return;
       }
       answerText = result.answer;
-      appendMessage(threadId, 'assistant', answerText);
+      appendMessage(threadId, 'assistant', answerText, result.sources, true);
       setIsAsking(false);
     } catch (err) {
       appendMessage(threadId, 'assistant', 'Something went wrong. Please try again.');
@@ -225,5 +244,6 @@ export function usePdfChat() {
     pauseAudio,
     resumeAudio,
     stopAudio,
+    markMessageStreamingComplete,
   };
 }
