@@ -9,7 +9,6 @@ const BASE = import.meta.env.VITE_API_URL;
 export async function uploadPdf(file: File): Promise<UploadResponse> {
   const formData = new FormData();
   formData.append('pdf', file);
-
   const res = await fetch(`${BASE}/pdf-chat/upload`, {
     method: 'POST',
     body: formData,
@@ -34,23 +33,55 @@ export async function askText(
 }
 
 /**
- * Ask a speech question — returns raw Response for streaming + X-Answer-Text header.
- * POST /pdf-chat/ask-speech
+ * Step 1 of speech pipeline: transcribe audio to text.
+ * Returns the transcript immediately so the UI can show it right away.
+ * POST /pdf-chat/transcribe
  */
-export async function askSpeech(
-  threadId: string,
+export async function transcribeAudio(
   audioBlob: Blob,
-): Promise<{ response: Response; answerText: string }> {
+): Promise<{ success: boolean; transcript?: string; error?: string }> {
   const formData = new FormData();
   formData.append('audio', audioBlob, 'question.webm');
-  formData.append('thread_id', threadId);
-
-  const res = await fetch(`${BASE}/pdf-chat/ask-speech`, {
+  const res = await fetch(`${BASE}/pdf-chat/transcribe`, {
     method: 'POST',
     body: formData,
   });
-  const answerText = res.headers.get('X-Answer-Text') ?? '';
-  return { response: res, answerText };
+  return res.json();
+}
+
+/**
+ * Step 2 of speech pipeline: RAG retrieval + LLM answer + TTS stream.
+ * POST /pdf-chat/ask-speech-answer
+ */
+export async function askSpeechAnswer(
+  threadId: string,
+  transcript: string,
+): Promise<{ response: Response; answerText: string; ok: boolean }> {
+  const res = await fetch(`${BASE}/pdf-chat/ask-speech-answer`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ thread_id: threadId, transcript }),
+  });
+  const rawAnswer = res.headers.get('X-Answer-Text') ?? '';
+  let answerText = '';
+  try {
+    answerText = decodeURIComponent(rawAnswer);
+  } catch (e) {
+    answerText = rawAnswer;
+  }
+  return { response: res, answerText, ok: res.ok };
+}
+
+/**
+ * Stream TTS audio for the given text.
+ * POST /pdf-chat/tts
+ */
+export async function streamTtsAudio(text: string): Promise<Response> {
+  return fetch(`${BASE}/pdf-chat/tts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  });
 }
 
 /**

@@ -1,5 +1,6 @@
 import os
 import tempfile
+import traceback
 
 from flask import Blueprint, request, jsonify, Response
 
@@ -90,7 +91,95 @@ def ask_text():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-@bp.route("/pdf-chat/ask-speech", methods=["POST"])
+@bp.route("/pdf-chat/transcribe", methods=["POST"])
+def transcribe():
+    """
+    Step 1 of speech mode: accept audio, run STT, return transcript immediately.
+    Frontend shows the transcript in chat, then calls /pdf-chat/ask-speech-answer.
+    """
+    if "audio" not in request.files:
+        return jsonify({"success": False, "error": "No audio file provided"}), 400
+
+    audio_file = request.files["audio"]
+    temp_path = tempfile.NamedTemporaryFile(delete=False, suffix=".webm").name
+    audio_file.save(temp_path)
+    try:
+        transcript = speech_to_text(temp_path)
+        if not transcript or not transcript.strip():
+            transcript = "Please summarise the document."
+        else:
+            transcript = transcript.strip()
+    except Exception as e:
+        print(f"[STT ERROR] {e}")
+        traceback.print_exc()
+        return jsonify({"success": False, "error": f"Transcription failed: {str(e)}"}), 500
+    finally:
+        if os.path.exists(temp_path):
+            os.unlink(temp_path)
+
+    return jsonify({"success": True, "transcript": transcript})
+
+
+@bp.route("/pdf-chat/ask-speech-answer", methods=["POST"])
+def ask_speech_answer():
+    """
+    Step 2 of speech mode: accept thread_id + transcript, run RAG, stream TTS.
+    Returns audio stream with X-Answer-Text header.
+    """
+    data = request.json or {}
+    thread_id = data.get("thread_id", "").strip()
+    question = data.get("transcript", "").strip()
+
+    if not thread_id or not question:
+        return jsonify({"success": False, "error": "Missing thread_id or transcript"}), 400
+
+    file_hash = next(
+        (fh for fh, tid in _session_threads.items() if tid == thread_id), None
+    )
+    if not file_hash:
+        return jsonify({"success": False, "error": "Session not found. Please re-upload the PDF."}), 404
+
+    vector_store = _cached_vector_stores.get(file_hash)
+    if not vector_store:
+        return jsonify({"success": False, "error": "Vector store not found."}), 404
+
+    try:
+        context, source_docs = retrieve_context(vector_store, question, k=5)
+        answer = build_answer(thread_id, context, question, source_docs)
+        spoken_answer = answer.split("\n\n📄 Sources:")[0]
+        import urllib.parse
+        safe_answer = urllib.parse.quote(answer)
+        return Response(
+            stream_audio(spoken_answer),
+            mimetype="text/plain",
+            headers={"X-Answer-Text": safe_answer},
+        )
+    except Exception as e:
+        print(f"[RAG/TTS ERROR] {e}")
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@bp.route("/pdf-chat/tts", methods=["POST"])
+def text_to_speech():
+    """
+    Accept text and stream TTS audio chunks.
+    """
+    data = request.json or {}
+    text = data.get("text", "").strip()
+    if not text:
+        return jsonify({"success": False, "error": "Missing text"}), 400
+    try:
+        return Response(
+            stream_audio(text),
+            mimetype="text/plain",
+        )
+    except Exception as e:
+        print(f"[TTS ERROR] {e}")
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 def ask_speech():
     """
     Accept an audio file and thread_id.
@@ -116,27 +205,40 @@ def ask_speech():
         return jsonify({"success": False, "error": "Vector store not found."}), 404
 
     audio_file = request.files["audio"]
-    tmp_audio_fd, tmp_audio_path = tempfile.mkstemp(suffix=".webm")
+    temp_path = tempfile.NamedTemporaryFile(delete=False, suffix=".webm").name
+    audio_file.save(temp_path)
     try:
-        with os.fdopen(tmp_audio_fd, "wb") as f:
-            audio_file.save(f)
-        question = speech_to_text(tmp_audio_path)
+        question = speech_to_text(temp_path)
         if not question or not question.strip():
             question = "Please summarise the document."
+        else:
+            question = question.strip()
+    except Exception as e:
+        print(f"[STT ERROR] {e}")
+        traceback.print_exc()
+        return jsonify({"success": False, "error": f"Speech transcription failed: {str(e)}"}), 500
     finally:
-        if os.path.exists(tmp_audio_path):
-            os.unlink(tmp_audio_path)
+        if os.path.exists(temp_path):
+            os.unlink(temp_path)
 
     try:
         context, source_docs = retrieve_context(vector_store, question, k=5)
         answer = build_answer(thread_id, context, question, source_docs)
         spoken_answer = answer.split("\n\n📄 Sources:")[0]
+        import urllib.parse
+        safe_answer = urllib.parse.quote(answer)
+        safe_transcript = urllib.parse.quote(question)
         return Response(
             stream_audio(spoken_answer),
             mimetype="text/plain",
-            headers={"X-Answer-Text": answer},
+            headers={
+                "X-Answer-Text": safe_answer,
+                "X-Transcript": safe_transcript,
+            },
         )
     except Exception as e:
+        print(f"[RAG/TTS ERROR] {e}")
+        traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
 
 

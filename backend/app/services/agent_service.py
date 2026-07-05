@@ -19,8 +19,8 @@ model = init_chat_model(
     api_key=Config.GOOGLE_API_KEY
 )
 
-agent = ""
-checkpointer = ""
+agent = None
+checkpointer = None
 
 
 def reset_agent(subject: str):
@@ -28,7 +28,7 @@ def reset_agent(subject: str):
     session.current_subject = subject
     session.question_count = 1
     checkpointer = InMemorySaver()
-    agenilt = create_agent(
+    agent = create_agent(
         model=model,
         tools=[],
         checkpointer=checkpointer

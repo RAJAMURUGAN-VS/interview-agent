@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import type { PdfTab, PdfChatMessage, ChatMode } from '../types';
-import { uploadPdf, askText, askSpeech, deleteSession } from '../api/pdfChatApi';
+import { uploadPdf, askText, transcribeAudio, askSpeechAnswer, streamTtsAudio, deleteSession } from '../api/pdfChatApi';
 import { useAudioStream } from './useAudioStream';
 import { useMediaRecorder } from './useMediaRecorder';
 
@@ -132,22 +132,65 @@ export function usePdfChat() {
     );
   }, [activeTab, textInput, isAsking, appendMessage]);
 
-  // ── Ask: speech mode ──────────────────────────────────────────────────────
+  // ── Ask: speech mode — two-step pipeline ─────────────────────────────────
   const handleSubmitSpeech = useCallback(async () => {
     if (!activeTab || !recordedBlob || isAsking) return;
 
     const { threadId } = activeTab;
     setIsAsking(true);
-    appendMessage(threadId, 'user', '🎤 Voice question');
 
-    const { response, answerText } = await askSpeech(threadId, recordedBlob);
-
-    if (answerText) {
-      appendMessage(threadId, 'assistant', answerText);
+    // ── Step 1: STT — transcribe audio, show question immediately ──────────
+    let transcript: string;
+    try {
+      const sttResult = await transcribeAudio(recordedBlob);
+      if (!sttResult.success || !sttResult.transcript) {
+        appendMessage(threadId, 'user', '🎤 Voice question');
+        appendMessage(threadId, 'assistant', sttResult.error ?? 'Could not transcribe audio. Please try again.');
+        setIsAsking(false);
+        return;
+      }
+      transcript = sttResult.transcript;
+      // Show the transcribed text immediately — user sees what they said
+      appendMessage(threadId, 'user', transcript);
+    } catch (err) {
+      appendMessage(threadId, 'user', '🎤 Voice question');
+      appendMessage(threadId, 'assistant', 'Transcription failed. Please try again.');
+      setIsAsking(false);
+      return;
     }
 
-    playStream(response);
-    setIsAsking(false);
+    // ── Step 2: Get text answer immediately using askText ───────────────────
+    let answerText = '';
+    try {
+      const result = await askText(threadId, transcript);
+      if (!result.success || !result.answer) {
+        appendMessage(
+          threadId,
+          'assistant',
+          result.error ?? 'Could not generate an answer. Please try again.',
+        );
+        setIsAsking(false);
+        return;
+      }
+      answerText = result.answer;
+      appendMessage(threadId, 'assistant', answerText);
+      setIsAsking(false);
+    } catch (err) {
+      appendMessage(threadId, 'assistant', 'Something went wrong. Please try again.');
+      setIsAsking(false);
+      return;
+    }
+
+    // ── Step 3: Stream TTS audio in background ──────────────────────────────
+    try {
+      const spokenAnswer = answerText.split('\n\n📄 Sources:')[0];
+      const ttsResponse = await streamTtsAudio(spokenAnswer);
+      if (ttsResponse.ok) {
+        playStream(ttsResponse).catch(() => {/* audio errors don't block chat */});
+      }
+    } catch (err) {
+      console.error('Failed to stream audio:', err);
+    }
   }, [activeTab, recordedBlob, isAsking, appendMessage, playStream]);
 
   return {

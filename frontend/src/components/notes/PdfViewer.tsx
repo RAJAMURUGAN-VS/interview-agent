@@ -69,7 +69,6 @@ export default function PdfViewer({ pdfPath }: Props) {
           </button>
         </div>
       )}
-      
       {/* PDF canvas */}
       <div
         className="card p-4 flex justify-center overflow-auto"

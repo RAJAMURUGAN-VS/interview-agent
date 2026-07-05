@@ -7,8 +7,6 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
-from langgraph.checkpoint.memory import InMemorySaver
-from langchain.agents import create_agent
 
 # Load embedding model ONCE at module level (shared instance)
 _embeddings = HuggingFaceEmbeddings(
@@ -18,84 +16,60 @@ _embeddings = HuggingFaceEmbeddings(
 # In-memory cache: file_hash → Chroma vector store
 _cached_vector_stores: dict[str, Chroma] = {}
 
-# LangGraph checkpointer dedicated to PDF chat — isolated from interview feature
-_pdf_chat_checkpointer = InMemorySaver()
+# Per-tab conversation history: thread_id → list of {role, content} messages
+_conversation_history: dict[str, list] = {}
 
-# Map of thread_id → agent instance for PDF chat sessions
-_pdf_chat_agents: dict = {}
-
-# Map of file_hash → thread_id for the current session
+# Map of file_hash → thread_id
 _session_threads: dict = {}
 
 
 def _get_file_hash(file_bytes: bytes) -> str:
-    """Generate a unique hash for the uploaded file bytes."""
     return hashlib.sha256(file_bytes).hexdigest()
 
 
 def get_or_build_vector_store(pdf_path: str, file_bytes: bytes) -> tuple[Chroma, str]:
-    """
-    Return cached vector store if file was already processed,
-    otherwise build and cache it.
-    Returns (vector_store, file_hash).
-    """
+    """Return cached vector store if already processed, otherwise build it."""
     file_hash = _get_file_hash(file_bytes)
 
     if file_hash not in _cached_vector_stores:
-        # Load the PDF document
         loader = PyPDFLoader(pdf_path)
         documents = loader.load()
 
-        # Split into chunks
         splitter = RecursiveCharacterTextSplitter(
             chunk_size=1000,
             chunk_overlap=200,
         )
         chunks = splitter.split_documents(documents)
 
-        # Embed and store in Chroma
         vector_store = Chroma.from_documents(
             documents=chunks,
             embedding=_embeddings,
             collection_name=f"pdf_chat_{file_hash}",
             persist_directory="./chroma_pdf_db",
         )
-
         _cached_vector_stores[file_hash] = vector_store
 
     return _cached_vector_stores[file_hash], file_hash
 
 
-def create_session(file_hash: str, model) -> str:
+def create_session(file_hash: str, model=None) -> str:
     """
-    Create a new LangGraph thread for a PDF session.
-    Returns a unique thread_id for this session.
-    Each session gets its own agent instance with the shared checkpointer.
-    The thread_id format is: pdf_chat_{file_hash_prefix}_{short_uuid}
+    Create a new conversation thread for a PDF tab.
+    Returns a unique thread_id (pdf_chat_{hash_prefix}_{uuid_short}).
     """
     short_id = str(uuid.uuid4())[:8]
     thread_id = f"pdf_chat_{file_hash[:8]}_{short_id}"
-
-    agent = create_agent(
-        model=model,
-        tools=[],
-        checkpointer=_pdf_chat_checkpointer,
-    )
-    _pdf_chat_agents[thread_id] = agent
+    _conversation_history[thread_id] = []
     _session_threads[file_hash] = thread_id
     return thread_id
 
 
 def clear_session(thread_id: str) -> None:
-    """
-    Remove the agent and vector store for a closed tab.
-    Called when the user closes a PDF tab.
-    """
-    _pdf_chat_agents.pop(thread_id, None)
+    """Remove conversation history and vector store when a tab is closed."""
+    _conversation_history.pop(thread_id, None)
 
-    # Remove the vector store whose session maps to this thread
     hash_to_remove = None
-    for file_hash, tid in _session_threads.items():
+    for file_hash, tid in list(_session_threads.items()):
         if tid == thread_id:
             hash_to_remove = file_hash
             break
@@ -105,10 +79,7 @@ def clear_session(thread_id: str) -> None:
 
 
 def retrieve_context(vector_store: Chroma, query: str, k: int = 5) -> tuple[str, list]:
-    """
-    Run similarity search and format retrieved chunks into a context string.
-    Returns (context_string, source_docs).
-    """
+    """Run similarity search and return (context_string, source_docs)."""
     retrieved_docs = vector_store.similarity_search(query, k=k)
     context_parts = []
     for i, doc in enumerate(retrieved_docs, start=1):
@@ -117,46 +88,50 @@ def retrieve_context(vector_store: Chroma, query: str, k: int = 5) -> tuple[str,
         context_parts.append(
             f"[Chunk {i} | Page {page_num} | Source: {source}]\n{doc.page_content}"
         )
-    docs_content = "\n\n".join(context_parts)
-    return docs_content, retrieved_docs
+    return "\n\n".join(context_parts), retrieved_docs
 
 
 def build_answer(thread_id: str, context: str, query: str, source_docs: list) -> str:
     """
-    Invoke the LangGraph agent for this thread with the retrieved context
-    and user query. The agent's checkpointer maintains full conversation
-    history per thread_id, so follow-up questions work correctly.
-    Returns the full answer string with source page numbers appended.
+    Invoke the LLM with per-tab conversation history for follow-up awareness.
+    Returns the answer string with source page citations appended.
     """
-    agent = _pdf_chat_agents.get(thread_id)
-    if not agent:
-        return "Session not found. Please re-upload the PDF."
+    from .agent_service import model
 
-    system_message = f"""Answer ONLY using the provided context. If the answer is not present in the context, respond with: 'I cannot find this information in the provided document.'
+    history = _conversation_history.get(thread_id, [])
 
-Context: {context}"""
-
-    config = {"configurable": {"thread_id": thread_id}}
-
-    response = agent.invoke(
+    messages = [
         {
-            "messages": [
-                {"role": "system", "content": system_message},
-                {"role": "user",   "content": query},
-            ]
-        },
-        config=config,
-    )
+            "role": "system",
+            "content": (
+                "You are a helpful assistant that answers questions strictly based on "
+                "the provided document context. If the answer cannot be found in the "
+                "context, respond with exactly: "
+                "'I cannot find this information in the provided document'.\n\n"
+                f"Document context:\n{context}"
+            ),
+        }
+    ] + history + [{"role": "user", "content": query}]
 
-    answer = response["messages"][-1].content
+    response = model.invoke(messages)
+    answer = response.content if hasattr(response, "content") else str(response)
 
-    if "I cannot find this information in the provided document" in answer:
-        return answer
+    if not answer or not answer.strip():
+        answer = "Could not generate an answer. Please try again."
 
-    sources = []
-    for doc in source_docs:
-        page = doc.metadata.get("page", 0) + 1
-        sources.append(f"Page {page}")
+    # Save turn to conversation history
+    _conversation_history[thread_id] = history + [
+        {"role": "user", "content": query},
+        {"role": "assistant", "content": answer},
+    ]
 
-    unique_sources = sorted(set(sources))
-    return f"{answer}\n\n📄 Sources: {', '.join(unique_sources)}"
+    # Append source page citations
+    if "I cannot find this information in the provided document" not in answer:
+        sources = sorted(set(
+            doc.metadata.get("page", 0) + 1 for doc in source_docs
+        ))
+        if sources:
+            pages = ", ".join(f"Page {p}" for p in sources)
+            answer = f"{answer}\n\n📄 Sources: {pages}"
+
+    return answer
