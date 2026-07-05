@@ -10,6 +10,7 @@ interface Props {
   textInput: string;
   isAsking: boolean;
   isSpeaking: boolean;
+  isPaused: boolean;
   isRecording: boolean;
   recordedBlob: Blob | null;
   onModeChange: (mode: ChatMode) => void;
@@ -18,12 +19,16 @@ interface Props {
   onStartRecording: () => void;
   onStopRecording: () => void;
   onSubmitSpeech: () => void;
+  onPauseAudio: () => void;
+  onResumeAudio: () => void;
+  onStopAudio: () => void;
 }
 
 export default function ChatWindow({
-  messages, mode, textInput, isAsking, isSpeaking, isRecording,
+  messages, mode, textInput, isAsking, isSpeaking, isPaused, isRecording,
   recordedBlob, onModeChange, onTextChange, onAskText,
   onStartRecording, onStopRecording, onSubmitSpeech,
+  onPauseAudio, onResumeAudio, onStopAudio,
 }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -66,7 +71,7 @@ export default function ChatWindow({
         {messages.map((msg) => (
           <ChatMessage key={msg.id} message={msg} />
         ))}
-        {isAsking && !isSpeaking && (
+        {isAsking && (
           <div className="flex gap-3 animate-fade-in">
             <div className="w-8 h-8 rounded-full bg-[#1c1c27] border
               border-[#2a2a3d] flex items-center justify-center text-xs
@@ -124,32 +129,70 @@ export default function ChatWindow({
         {mode === 'speech' && (
           <div className="flex flex-col items-center gap-4">
             {isSpeaking && (
-              <div className="flex items-center gap-2 text-xs text-[#8b8ba8]">
-                <i className="fas fa-volume-up text-[#4f46e5]" />
-                Playing answer…
+              <div className="flex items-center gap-4 bg-[#1c1c27] border border-[#2a2a3d] px-4 py-2 rounded-xl shadow-md animate-fade-in">
+                <div className="flex items-center gap-2 text-xs text-[#8b8ba8]">
+                  <i className="fas fa-volume-up text-[#4f46e5] animate-pulse" />
+                  <span>{isPaused ? 'Audio paused' : 'Playing answer…'}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {isPaused ? (
+                    <button
+                      onClick={onResumeAudio}
+                      title="Resume"
+                      className="w-8 h-8 rounded-lg bg-[#2a2a3d] hover:bg-[#3a3a52] text-[#f0f0ff] flex items-center justify-center transition-colors"
+                    >
+                      <i className="fas fa-play text-xs" />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={onPauseAudio}
+                      title="Pause"
+                      className="w-8 h-8 rounded-lg bg-[#2a2a3d] hover:bg-[#3a3a52] text-[#f0f0ff] flex items-center justify-center transition-colors"
+                    >
+                      <i className="fas fa-pause text-xs" />
+                    </button>
+                  )}
+                  <button
+                    onClick={onStopAudio}
+                    title="Stop"
+                    className="w-8 h-8 rounded-lg bg-[#ef4444] hover:bg-[#dc2626] text-white flex items-center justify-center transition-colors"
+                  >
+                    <i className="fas fa-stop text-xs" />
+                  </button>
+                </div>
               </div>
             )}
-            <RecordButton
-              isRecording={isRecording}
-              disabled={isAsking || isSpeaking}
-              onClick={isRecording ? onStopRecording : onStartRecording}
-            />
+            <div className="flex items-center justify-center gap-6">
+              <div className="flex flex-col items-center gap-1">
+                <RecordButton
+                  isRecording={isRecording}
+                  disabled={false}
+                  onClick={isRecording ? onStopRecording : onStartRecording}
+                />
+                <p className="text-[10px] text-[#4a4a6a]">
+                  {isRecording ? 'Stop' : 'Record'}
+                </p>
+              </div>
+              <div className="flex flex-col items-center gap-1">
+                <button
+                  onClick={onSubmitSpeech}
+                  disabled={!recordedBlob || isRecording}
+                  className="w-12 h-12 rounded-full bg-[#4f46e5] hover:bg-[#4338ca]
+                    flex items-center justify-center text-white transition-all duration-200
+                    disabled:opacity-40 disabled:cursor-not-allowed hover:shadow-[0_0_12px_rgba(79,70,229,0.4)]"
+                >
+                  <i className="fas fa-paper-plane text-sm" />
+                </button>
+                <p className="text-[10px] text-[#4a4a6a]">Send</p>
+              </div>
+            </div>
             <p className="text-xs text-[#4a4a6a]">
               {isRecording
                 ? 'Recording… click to stop'
                 : isSpeaking
                 ? 'Listening to answer…'
-                : 'Click to ask a question'}
+                : 'Click to record your voice question'}
             </p>
-            {recordedBlob && !isRecording && !isAsking && (
-              <button
-                onClick={onSubmitSpeech}
-                className="px-5 py-2 rounded-xl bg-[#4f46e5] hover:bg-[#4338ca]
-                  text-white text-sm font-semibold transition-all duration-200"
-              >
-                <i className="fas fa-paper-plane mr-2" />Send
-              </button>
-            )}
           </div>
         )}
       </div>

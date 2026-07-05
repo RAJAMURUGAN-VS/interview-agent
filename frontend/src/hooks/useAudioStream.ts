@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 
 export function useAudioStream() {
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
 
   async function playStream(response: Response, onComplete?: () => void) {
@@ -12,6 +13,7 @@ export function useAudioStream() {
     }
 
     setIsSpeaking(true);
+    setIsPaused(false);
 
     try {
       const reader = response.body!.getReader();
@@ -40,6 +42,7 @@ export function useAudioStream() {
 
       if (allBytes.length === 0) {
         setIsSpeaking(false);
+        setIsPaused(false);
         if (onComplete) onComplete();
         return;
       }
@@ -58,6 +61,7 @@ export function useAudioStream() {
 
       audio.onended = () => {
         setIsSpeaking(false);
+        setIsPaused(false);
         currentAudioRef.current = null;
         if (onComplete) onComplete();
       };
@@ -65,6 +69,7 @@ export function useAudioStream() {
       audio.onerror = (e) => {
         console.error('Audio playback error:', e);
         setIsSpeaking(false);
+        setIsPaused(false);
         currentAudioRef.current = null;
         if (onComplete) onComplete();
       };
@@ -73,9 +78,40 @@ export function useAudioStream() {
     } catch (e) {
       console.error('Audio stream error:', e);
       setIsSpeaking(false);
+      setIsPaused(false);
       if (onComplete) onComplete();
     }
   }
 
-  return { isSpeaking, playStream };
+  function pauseAudio() {
+    if (currentAudioRef.current && !currentAudioRef.current.paused) {
+      currentAudioRef.current.pause();
+      setIsPaused(true);
+    }
+  }
+
+  function resumeAudio() {
+    if (currentAudioRef.current && currentAudioRef.current.paused) {
+      currentAudioRef.current.play().catch(e => console.error("Error resuming audio:", e));
+      setIsPaused(false);
+    }
+  }
+
+  function stopAudio() {
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current = null;
+    }
+    setIsSpeaking(false);
+    setIsPaused(false);
+  }
+
+  return {
+    isSpeaking,
+    isPaused,
+    playStream,
+    pauseAudio,
+    resumeAudio,
+    stopAudio,
+  };
 }

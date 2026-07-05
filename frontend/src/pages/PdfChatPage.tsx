@@ -7,11 +7,12 @@ export default function PdfChatPage() {
   const {
     tabs, activeThreadId, activeTab,
     showUploadPanel, isUploading, uploadError,
-    mode, textInput, isAsking, isSpeaking, isRecording, recordedBlob,
+    mode, textInput, isAsking, isSpeaking, isPaused, isRecording, recordedBlob,
     setMode, setTextInput,
     handleUpload, handleSelectTab, handleCloseTab, handleShowUploadPanel,
     handleAskText, handleSubmitSpeech,
     startRecording, stopRecording,
+    pauseAudio, resumeAudio, stopAudio,
   } = usePdfChat();
 
   return (
@@ -82,6 +83,7 @@ export default function PdfChatPage() {
             textInput={textInput}
             isAsking={isAsking}
             isSpeaking={isSpeaking}
+            isPaused={isPaused}
             isRecording={isRecording}
             recordedBlob={recordedBlob}
             onModeChange={setMode}
@@ -90,6 +92,9 @@ export default function PdfChatPage() {
             onStartRecording={startRecording}
             onStopRecording={stopRecording}
             onSubmitSpeech={handleSubmitSpeech}
+            onPauseAudio={pauseAudio}
+            onResumeAudio={resumeAudio}
+            onStopAudio={stopAudio}
           />
         )}
       </div>

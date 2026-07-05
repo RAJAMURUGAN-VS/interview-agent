@@ -19,7 +19,7 @@ export function usePdfChat() {
   const [textInput, setTextInput] = useState('');
   const [isAsking, setIsAsking]   = useState(false);
 
-  const { isSpeaking, playStream }  = useAudioStream();
+  const { isSpeaking, isPaused, playStream, pauseAudio, resumeAudio, stopAudio } = useAudioStream();
   const { isRecording, recordedBlob, startRecording, stopRecording } =
     useMediaRecorder();
 
@@ -207,6 +207,7 @@ export function usePdfChat() {
     textInput,
     isAsking,
     isSpeaking,
+    isPaused,
     isRecording,
     recordedBlob,
     // Setters
@@ -221,5 +222,8 @@ export function usePdfChat() {
     handleSubmitSpeech,
     startRecording,
     stopRecording,
+    pauseAudio,
+    resumeAudio,
+    stopAudio,
   };
 }
