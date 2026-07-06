@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from langchain.chat_models import init_chat_model
 from langgraph.checkpoint.memory import InMemorySaver
 from langchain.agents import create_agent
@@ -10,6 +10,7 @@ class SessionState:
     question_count: int
     current_subject: str
     thread_id: str
+    pronunciation_log: list = field(default_factory=list)
 
 
 session = SessionState(0, "", "interview_session")
@@ -27,6 +28,7 @@ def reset_agent(subject: str):
     global agent, checkpointer
     session.current_subject = subject
     session.question_count = 1
+    session.pronunciation_log = []
     checkpointer = InMemorySaver()
     agent = create_agent(
         model=model,
@@ -36,4 +38,7 @@ def reset_agent(subject: str):
 
 
 def invoke_agent(messages, config):
+    global agent, checkpointer
+    if agent is None:
+        reset_agent(session.current_subject or "Python")
     return agent.invoke(messages, config)

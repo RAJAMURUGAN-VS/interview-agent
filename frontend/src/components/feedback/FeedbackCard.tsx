@@ -1,5 +1,6 @@
 import ScoreCircle from '../ui/ScoreCircle';
 import type { FeedbackData } from '../../types';
+import PronunciationSection from './PronunciationSection';
 
 interface Props { feedbackData: FeedbackData; }
 
@@ -59,6 +60,11 @@ export default function FeedbackCard({ feedbackData }: Props) {
           {feedbackData.areas_of_improvement}
         </p>
       </div>
+
+      {/* Pronunciation Analysis — only shown when data is available */}
+      {feedbackData.pronunciation_feedback && (
+        <PronunciationSection data={feedbackData.pronunciation_feedback} />
+      )}
 
     </div>
   );

@@ -16,6 +16,21 @@ export interface FeedbackData {
   candidate_score: number;
   feedback: string;
   areas_of_improvement: string;
+  pronunciation_feedback?: PronunciationFeedback;
+}
+
+export interface PronunciationPerAnswer {
+  answer_number: number;
+  filler_count: number;
+  fillers_used: string[];
+  long_pause_count: number;
+  note: string;
+}
+
+export interface PronunciationFeedback {
+  summary: string;
+  tips: string[];
+  per_answer: PronunciationPerAnswer[];
 }
 
 export interface SubmitAnswerMeta {

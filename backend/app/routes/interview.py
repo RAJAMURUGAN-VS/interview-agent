@@ -36,11 +36,36 @@ def submit_answer():
         temp_path = tempfile.NamedTemporaryFile(delete=False, suffix=".webm").name
         audio_file.save(temp_path)
 
-        answer = stt_service.speech_to_text(temp_path)
+        stt_result = stt_service.speech_to_text(temp_path)
         os.unlink(temp_path)
+
+        # Handle both old (str) and new (dict) return formats safely
+        if isinstance(stt_result, dict):
+            answer = stt_result.get("transcript", "")
+            pronunciation_entry = {
+                "answer_number":       agent_service.session.question_count,
+                "fillers":             stt_result.get("fillers", []),
+                "long_pauses":         stt_result.get("long_pauses", []),
+                "filler_count":        stt_result.get("filler_count", 0),
+                "long_pause_count":    stt_result.get("long_pause_count", 0),
+                "word_confidence_avg": stt_result.get("word_confidence_avg", 0.0),
+            }
+        else:
+            # Fallback: stt returned a plain string
+            answer = stt_result or ""
+            pronunciation_entry = {
+                "answer_number":       agent_service.session.question_count,
+                "fillers":             [],
+                "long_pauses":         [],
+                "filler_count":        0,
+                "long_pause_count":    0,
+                "word_confidence_avg": 0.0,
+            }
 
         if not answer or answer.strip() == "":
             answer = "[Candidate provided a verbal response]"
+
+        agent_service.session.pronunciation_log.append(pronunciation_entry)
 
         config = {"configurable": {"thread_id": agent_service.session.thread_id}}
 

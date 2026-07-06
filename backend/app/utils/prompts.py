@@ -19,12 +19,39 @@ candidate truly said, not what you think they might have said.
 
 Keep it short, conversational, and adaptive!"""
 
-FEEDBACK_PROMPT = """Based on our complete interview conversation, provide \
-detailed feedback as JSON only:
+FEEDBACK_PROMPT = """Based on our complete interview conversation and the pronunciation data below, provide feedback as a single JSON object only. Do not include any text outside the JSON.
+
+Pronunciation data collected across all answers:
+{pronunciation_data}
+
+Return this exact JSON structure:
 {{
   "subject": "<topic>",
   "candidate_score": <1-5>,
-  "feedback": "<detailed strengths with specific examples from their ACTUAL answers>",
-  "areas_of_improvement": "<constructive suggestions based on gaps you noticed>"
+  "feedback": "<strengths with specific examples from their ACTUAL answers>",
+  "areas_of_improvement": "<constructive suggestions based on gaps noticed>",
+  "pronunciation_feedback": {{
+    "summary": "<2-3 sentence overview of speech fluency across all 5 answers, referencing actual filler counts and pause counts from the data above>",
+    "tips": [
+      "<specific actionable tip 1 based on the most frequent issue in the data>",
+      "<specific actionable tip 2>",
+      "<specific actionable tip 3>"
+    ],
+    "per_answer": [
+      {{
+        "answer_number": <1-5>,
+        "filler_count": <int from data>,
+        "fillers_used": ["<list of distinct filler words used in this answer>"],
+        "long_pause_count": <int from data>,
+        "note": "<one sentence observation about this specific answer's fluency>"
+      }}
+    ]
+  }}
 }}
-Be specific - reference ACTUAL things they said during the interview."""
+
+Rules:
+- candidate_score must reflect only technical knowledge, not pronunciation
+- pronunciation_feedback.per_answer must have exactly 5 entries (one per answer)
+- If an answer had 0 fillers and 0 pauses, note that as positive
+- Reference the actual words from the data — do not invent fillers
+- Be encouraging but honest"""
