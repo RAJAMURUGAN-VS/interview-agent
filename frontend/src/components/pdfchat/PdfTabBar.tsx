@@ -15,7 +15,7 @@ export default function PdfTabBar({
 }: Props) {
   return (
     <div className="flex items-center gap-1 overflow-x-auto pb-0
-      border-b border-[#2a2a3d] mb-0 scrollbar-thin">
+      border-b border-[#2a2a3d] mb-0 scrollbar-thin touch-pan-x">
 
       {/* Existing PDF tabs */}
       {tabs.map((tab) => {
@@ -24,10 +24,10 @@ export default function PdfTabBar({
         return (
           <div
             key={tab.threadId}
-            className={`group flex items-center gap-2 px-4 py-2.5
+            className={`group flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5
               rounded-t-lg border border-b-0 text-sm font-medium
-              cursor-pointer flex-shrink-0 max-w-[200px]
-              transition-all duration-150
+              cursor-pointer flex-shrink-0 max-w-[140px] sm:max-w-[200px]
+              transition-all duration-150 touch-manipulation
               ${isActive
                 ? 'bg-[#13131a] border-[#2a2a3d] text-[#f0f0ff]'
                 : 'bg-[#0a0a0f] border-transparent text-[#8b8ba8] hover:text-[#f0f0ff] hover:bg-[#1c1c27]'}`}

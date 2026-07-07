@@ -70,15 +70,15 @@ export default function PronunciationSection({ data }: Props) {
 
               <button
                 onClick={() => setOpenAnswer(isOpen ? null : ans.answer_number)}
-                className="w-full flex items-center justify-between px-4 py-3
-                  text-left hover:bg-[#1c1c27] transition-colors duration-150"
+                className="w-full flex items-center justify-between px-3 sm:px-4 py-3
+                  text-left hover:bg-[#1c1c27] transition-colors duration-150 gap-2"
               >
-                <div className="flex items-center gap-3">
-                  <span className="text-xs font-semibold text-[#4f46e5]
+                <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
+                  <span className="text-xs font-semibold text-[#4f46e5] flex-shrink-0
                     bg-[#4f46e5]/10 border border-[#4f46e5]/20 px-2 py-0.5 rounded-md">
                     Q{ans.answer_number}
                   </span>
-                  <div className="flex items-center gap-2 text-xs text-[#8b8ba8]">
+                  <div className="flex items-center gap-2 text-xs text-[#8b8ba8] flex-wrap">
                     {hasFiller && (
                       <span className="flex items-center gap-1">
                         <i className="fas fa-comment-dots text-[#f59e0b]" />
@@ -99,7 +99,7 @@ export default function PronunciationSection({ data }: Props) {
                     )}
                   </div>
                 </div>
-                <i className={`fas fa-chevron-down text-[#4a4a6a] text-xs
+                <i className={`fas fa-chevron-down text-[#4a4a6a] text-xs flex-shrink-0
                   transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
               </button>
 

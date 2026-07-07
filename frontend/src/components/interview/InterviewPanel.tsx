@@ -62,7 +62,7 @@ export default function InterviewPanel(props: Props) {
     <div className="animate-fade-in">
 
       {/* Header row */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between flex-wrap gap-2 mb-6 sm:mb-8">
         {currentSubject && <Badge subject={currentSubject} />}
         <QuestionTracker questionNumber={questionNumber} />
       </div>

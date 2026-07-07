@@ -46,8 +46,8 @@ export default function CustomisePanel({
             <button
               key={n}
               onClick={() => onCountChange(n)}
-              className={`flex-1 py-2 rounded-xl border text-sm font-semibold
-                transition-all duration-200
+              className={`flex-1 py-2.5 rounded-xl border text-sm font-semibold
+                transition-all duration-200 touch-manipulation
                 ${questionCount === n
                   ? 'bg-[#4f46e5]/10 border-[#4f46e5] text-[#4f46e5]'
                   : 'bg-transparent border-[#2a2a3d] text-[#8b8ba8] hover:border-[#4f46e5] hover:text-[#f0f0ff]'}`}

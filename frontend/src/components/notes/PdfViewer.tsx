@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
@@ -11,17 +11,22 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 interface Props { pdfPath: string; }
 
 export default function PdfViewer({ pdfPath }: Props) {
-  const [numPages, setNumPages] = useState<number | null>(null);
+  const [numPages, setNumPages]   = useState<number | null>(null);
   const [loadError, setLoadError] = useState(false);
+  const [pageWidth, setPageWidth] = useState(700);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const onLoadSuccess = useCallback(({ numPages }: { numPages: number }) => {
     setNumPages(numPages);
     setLoadError(false);
+    // Measure the container and cap width so pages fit without overflow
+    if (containerRef.current) {
+      const available = containerRef.current.clientWidth - 32; // 32 = p-4 * 2
+      setPageWidth(Math.min(available, 700));
+    }
   }, []);
 
-  const onLoadError = useCallback(() => {
-    setLoadError(true);
-  }, []);
+  const onLoadError = useCallback(() => setLoadError(true), []);
 
   if (loadError) {
     return (
@@ -35,7 +40,8 @@ export default function PdfViewer({ pdfPath }: Props) {
 
   return (
     <div
-      className="card p-4 overflow-y-auto"
+      ref={containerRef}
+      className="card p-4 overflow-y-auto w-full"
       style={{ maxHeight: '80vh' }}
       onContextMenu={(e) => e.preventDefault()}
     >
@@ -51,13 +57,10 @@ export default function PdfViewer({ pdfPath }: Props) {
       >
         {numPages &&
           Array.from({ length: numPages }, (_, i) => (
-            <div
-              key={i + 1}
-              className="flex justify-center mb-3 last:mb-0"
-            >
+            <div key={i + 1} className="flex justify-center mb-3 last:mb-0 w-full">
               <Page
                 pageNumber={i + 1}
-                width={Math.min(window.innerWidth - 80, 700)}
+                width={pageWidth}
                 renderTextLayer={false}
                 renderAnnotationLayer={false}
               />

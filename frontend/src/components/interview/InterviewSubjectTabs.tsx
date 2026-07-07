@@ -31,14 +31,14 @@ export default function InterviewSubjectTabs({ activeSubject }: Props) {
           <button
             key={short}
             onClick={() => navigate(`/interview/${toSlug(subject)}`)}
-            className={`px-4 py-2 rounded-lg border text-sm font-medium
-              transition-all duration-200
+            className={`px-3 py-2 sm:px-4 rounded-lg border text-sm font-medium
+              transition-all duration-200 touch-manipulation
               ${isActive
                 ? TAB_COLORS[short]
                 : 'border-[#2a2a3d] text-[#8b8ba8] bg-transparent hover:border-[#4f46e5] hover:text-[#f0f0ff]'}`}
           >
             {short}
-            <span className="ml-2 text-xs opacity-60">
+            <span className="ml-1.5 text-xs opacity-60 hidden sm:inline">
               {subject.split(' ')[0]}
             </span>
           </button>

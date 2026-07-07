@@ -11,7 +11,7 @@ export default function WelcomePage() {
   }
 
   return (
-    <div className="animate-fade-in max-w-2xl mx-auto px-4 pt-8 pb-12">
+    <div className="animate-fade-in max-w-2xl mx-auto px-4 sm:px-6 pt-8 pb-12">
       {/* Header */}
       <div className="mb-6">
         <p className="text-xs font-medium uppercase tracking-widest text-[#4f46e5] mb-2">

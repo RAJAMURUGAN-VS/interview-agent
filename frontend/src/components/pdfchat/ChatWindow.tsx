@@ -75,7 +75,7 @@ export default function ChatWindow({
   };
 
   return (
-    <div className="card flex flex-col gap-4" style={{ minHeight: '480px' }}>
+    <div className="card flex flex-col gap-4" style={{ minHeight: 'clamp(300px, 60vh, 480px)' }}>
 
       {/* Mode toggle */}
       <div className="flex items-center justify-between">
@@ -89,7 +89,7 @@ export default function ChatWindow({
       <div
         ref={containerRef}
         className="flex-1 overflow-y-auto flex flex-col gap-4 pr-1"
-        style={{ maxHeight: '320px' }}
+        style={{ maxHeight: 'clamp(200px, 40vh, 320px)' }}
       >
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full

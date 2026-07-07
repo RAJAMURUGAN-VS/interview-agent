@@ -22,14 +22,14 @@ export default function SubjectTabs({ activeSubject, onSelect }: Props) {
         <button
           key={tab}
           onClick={() => onSelect(tab)}
-          className={`px-4 py-2 rounded-lg border text-sm font-medium
-            transition-all duration-200
+          className={`px-3 py-2 sm:px-4 rounded-lg border text-sm font-medium
+            transition-all duration-200 touch-manipulation
             ${activeSubject === tab
               ? TAB_COLORS[tab]
               : 'border-[#2a2a3d] text-[#8b8ba8] bg-transparent hover:border-[#4f46e5] hover:text-[#f0f0ff]'}`}
         >
           {tab}
-          <span className="ml-2 text-xs opacity-60">
+          <span className="ml-1.5 text-xs opacity-60 hidden sm:inline">
             {NOTES_SUBJECT_LABELS[tab].split(' ')[0]}
           </span>
         </button>

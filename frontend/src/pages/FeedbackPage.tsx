@@ -29,7 +29,7 @@ export default function FeedbackPage() {
   }
 
   return (
-    <div className="animate-fade-in max-w-2xl mx-auto px-4 pt-8 pb-12">
+    <div className="animate-fade-in max-w-2xl mx-auto px-4 sm:px-6 pt-8 pb-12">
       {/* Subject tabs */}
       <div className="mb-6">
         <InterviewSubjectTabs activeSubject={interview.currentSubject} />

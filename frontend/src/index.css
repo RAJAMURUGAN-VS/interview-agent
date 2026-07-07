@@ -35,6 +35,13 @@ body {
   font-family: 'Inter', system-ui, sans-serif;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
+  /* Prevent horizontal scroll on all devices */
+  overflow-x: hidden;
+}
+
+/* Ensure all elements respect the viewport width */
+html {
+  overflow-x: hidden;
 }
 
 ::-webkit-scrollbar { width: 6px; }
@@ -46,8 +53,14 @@ body {
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: 16px;
-  padding: 24px;
+  padding: 16px;
   box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+}
+
+@media (min-width: 640px) {
+  .card {
+    padding: 24px;
+  }
 }
 
 .glow { box-shadow: 0 0 20px var(--accent-glow); }

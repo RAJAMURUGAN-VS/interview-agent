@@ -33,7 +33,7 @@ export default function InterviewPage() {
   if (!subject) return <Navigate to="/interview" replace />;
 
   return (
-    <div className="animate-fade-in max-w-2xl mx-auto px-4 pt-8 pb-12">
+    <div className="animate-fade-in max-w-2xl mx-auto px-4 sm:px-6 pt-8 pb-12">
       {/* Subject tabs — same pattern as Notes */}
       <div className="mb-6">
         <InterviewSubjectTabs activeSubject={interview.currentSubject} />

@@ -28,6 +28,7 @@ export default function OptionButton({ label, text, status, disabled, onClick }:
       className={`w-full flex items-center gap-3 px-4 py-3.5
         rounded-xl border text-sm text-left font-medium
         transition-all duration-200 disabled:cursor-default
+        touch-manipulation
         ${styles[status]}`}
     >
       <span className="flex-shrink-0 w-7 h-7 rounded-lg border

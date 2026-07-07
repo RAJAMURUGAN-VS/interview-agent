@@ -41,7 +41,7 @@ export default function McqPage() {
   );
 
   return (
-    <div className="animate-fade-in w-full max-w-7xl mx-auto px-6 pt-8 pb-12">
+    <div className="animate-fade-in w-full max-w-7xl mx-auto px-4 sm:px-6 pt-8 pb-12">
       {header}
 
       <ErrorBoundary>

@@ -17,7 +17,7 @@ export default function PdfChatPage() {
   } = usePdfChat();
 
   return (
-    <div className="animate-fade-in max-w-3xl mx-auto px-4 pt-8 pb-12">
+    <div className="animate-fade-in max-w-3xl mx-auto px-4 sm:px-6 pt-8 pb-12">
 
       {/* Page header */}
       <div className="mb-4">
