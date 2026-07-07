@@ -6,6 +6,7 @@ import InterviewPage from './pages/InterviewPage';
 import FeedbackPage from './pages/FeedbackPage';
 import NotesSubjectPage from './pages/NotesSubjectPage';
 import PdfChatPage from './pages/PdfChatPage';
+import McqPage from './components/mcq/McqPage';
 
 export default function App() {
   return (
@@ -30,6 +31,9 @@ export default function App() {
 
             {/* PDF Chat route */}
             <Route path="/pdf-chat" element={<PdfChatPage />} />
+
+            {/* MCQ route */}
+            <Route path="/mcq" element={<McqPage />} />
 
             {/* Fallback */}
             <Route path="*" element={<Navigate to="/interview" replace />} />

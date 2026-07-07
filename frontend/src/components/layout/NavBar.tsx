@@ -58,6 +58,17 @@ export default function NavBar() {
           <i className="fas fa-file-pdf mr-2 text-xs" />
           PDF Chat
         </NavLink>
+
+        <NavLink
+          to="/mcq"
+          className={({ isActive }) =>
+            `px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-200
+            ${isActive ? activeClass : idleClass}`
+          }
+        >
+          <i className="fas fa-circle-question mr-2 text-xs" />
+          MCQ
+        </NavLink>
       </div>
     </nav>
   );
