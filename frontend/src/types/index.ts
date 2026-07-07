@@ -7,7 +7,7 @@ export type InterviewSubject =
 
 export type NotesSubject = 'OS' | 'OOP' | 'DBMS' | 'CN';
 
-export type AppTab = 'interview' | 'notes' | 'pdf-chat' | 'mcq';
+export type AppTab = 'interview' | 'notes' | 'pdf-chat' | 'mcq' | 'codefill';
 
 export type InterviewPhase = 'welcome' | 'active' | 'feedback';
 
@@ -131,5 +131,81 @@ export interface McqGenerateResponse {
 export interface McqFeedbackResponse {
   success: boolean;
   feedback?: McqFeedback;
+  error?: string;
+}
+
+// ── Code Fill ─────────────────────────────────────────
+
+export type CfLanguage      = 'python' | 'java' | 'c' | 'c++';
+export type CfCategory      = 'competitive programming' | 'oop';
+export type CfPhase         = 'setup' | 'quiz' | 'feedback';
+export type CfGrade         = 'Excellent' | 'Good' | 'Needs Practice' | 'Struggling';
+export type CfQuestionCount = 5 | 10 | 15 | 20;
+
+export interface CfBlank {
+  id: string;
+  answer: string;
+  hint: string;
+}
+
+export interface CfQuestion {
+  id: string;
+  language: string;
+  topic: string;
+  prompt: string;
+  code_template: string;
+  blanks: CfBlank[];
+  explanation: string;
+}
+
+export interface CfBlankResult {
+  blank_id: string;
+  is_correct: boolean;
+  correct_answer: string;
+}
+
+export interface CfAnswerRecord {
+  question_id: string;
+  user_answers: string[];
+  is_correct: boolean;
+  attempts: number;
+  hint_used: boolean;
+  skipped: boolean;
+}
+
+export interface CfSessionConfig {
+  language: CfLanguage;
+  category: CfCategory;
+  topics: string[];
+  question_count: CfQuestionCount;
+}
+
+export interface CfFeedback {
+  score: number;
+  total: number;
+  percentage: number;
+  grade: CfGrade;
+  summary: string;
+  strong_topics: string[];
+  weak_topics: string[];
+  tips: string[];
+}
+
+export interface CfGenerateResponse {
+  success: boolean;
+  questions?: CfQuestion[];
+  error?: string;
+}
+
+export interface CfCheckResponse {
+  success: boolean;
+  all_correct?: boolean;
+  blank_results?: CfBlankResult[];
+  error?: string;
+}
+
+export interface CfFeedbackResponse {
+  success: boolean;
+  feedback?: CfFeedback;
   error?: string;
 }

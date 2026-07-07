@@ -15,9 +15,10 @@ def create_app():
         sys.exit(1)
 
     CORS(app, expose_headers=['X-Question-Number', 'X-Interview-Complete', 'X-Answer-Text', 'X-Transcript'])
-    from .routes import interview, feedback, pdf_chat, mcq
+    from .routes import interview, feedback, pdf_chat, mcq, codefill
     app.register_blueprint(interview.bp)
     app.register_blueprint(feedback.bp)
     app.register_blueprint(pdf_chat.bp)
     app.register_blueprint(mcq.bp)
+    app.register_blueprint(codefill.bp)
     return app

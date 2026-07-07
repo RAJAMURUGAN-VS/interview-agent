@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 
 const TABS = [
-  { to: '/interview', icon: 'fas fa-microphone', label: 'Interview' },
-  { to: '/notes',     icon: 'fas fa-book-open',  label: 'Notes'     },
-  { to: '/pdf-chat',  icon: 'fas fa-file-pdf',   label: 'PDF Chat'  },
-  { to: '/mcq',       icon: 'fas fa-circle-question', label: 'MCQ'  },
+  { to: '/interview', icon: 'fas fa-microphone',      label: 'Interview' },
+  { to: '/notes',     icon: 'fas fa-book-open',       label: 'Notes'     },
+  { to: '/pdf-chat',  icon: 'fas fa-file-pdf',        label: 'PDF Chat'  },
+  { to: '/mcq',       icon: 'fas fa-circle-question', label: 'MCQ'       },
+  { to: '/codefill',  icon: 'fas fa-code',            label: 'Code Fill' },
 ];
 
 export default function NavBar() {

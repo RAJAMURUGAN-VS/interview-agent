@@ -7,6 +7,7 @@ import FeedbackPage from './pages/FeedbackPage';
 import NotesSubjectPage from './pages/NotesSubjectPage';
 import PdfChatPage from './pages/PdfChatPage';
 import McqPage from './components/mcq/McqPage';
+import CodeFillPage from './components/codefill/CodeFillPage';
 
 export default function App() {
   return (
@@ -34,6 +35,9 @@ export default function App() {
 
             {/* MCQ route */}
             <Route path="/mcq" element={<McqPage />} />
+
+            {/* Code Fill route */}
+            <Route path="/codefill" element={<CodeFillPage />} />
 
             {/* Fallback */}
             <Route path="*" element={<Navigate to="/interview" replace />} />
