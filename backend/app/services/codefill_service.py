@@ -84,6 +84,55 @@ def generate_questions(
     return questions
 
 
+import re as _re
+
+# Operators where surrounding whitespace is purely stylistic
+# (both `<=n` and `<= n` compile identically)
+_OPERATORS = [
+    r'<<=', r'>>=',           # compound shift-assign (3-char first)
+    r'&&', r'\|\|',           # logical
+    r'<<', r'>>',             # shift
+    r'<=', r'>=', r'!=', r'==',  # comparison
+    r'\+\+', r'--',           # unary inc/dec
+    r'\+=', r'-=', r'\*=', r'/=', r'%=', r'&=', r'\|=', r'\^=',  # compound assign
+    r'->', r'\.',              # member access
+    r'<', r'>',               # less/greater (must come after << >> <= >=)
+    r'[+\-*/%&|^~!]',         # single-char operators
+    r'=',                     # simple assign (must come after == != +=  etc.)
+]
+# Build a pattern that matches any operator
+_OP_PATTERN = _re.compile(
+    r'\s*(' + '|'.join(_OPERATORS) + r')\s*'
+)
+
+
+def _normalize(s: str) -> str:
+    """
+    Normalize a code answer for compiler-aware comparison:
+
+    1. Strip outer whitespace.
+    2. Remove spaces around operators so spacing is irrelevant:
+         '<= n'  →  '<=n'
+         'i ++'  →  'i++'
+         'i + 1' →  'i+1'
+    3. Collapse remaining runs of whitespace to a single space so that
+       keyword-to-identifier spacing is preserved:
+         'else if'  stays 'else if'   (two word tokens — space required)
+         'elseif'   stays 'elseif'    (one token — would fail against 'else if')
+         'return n' stays 'return n'
+    4. Lowercase everything.
+
+    Result: '<=n' == '<= n', 'i++' == 'i ++', '>= n' == '>=n'
+            but 'elseif' ≠ 'else if'
+    """
+    s = s.strip().lower()
+    # Remove spaces around every operator
+    s = _OP_PATTERN.sub(r'\1', s)
+    # Collapse any remaining multi-space gaps to single space
+    s = _re.sub(r'[ \t]+', ' ', s).strip()
+    return s
+
+
 def check_answer(question: dict, user_answers: list) -> dict:
     """
     Compare user-submitted answers against correct answers for all blanks.
@@ -94,9 +143,9 @@ def check_answer(question: dict, user_answers: list) -> dict:
     all_correct = True
 
     for i, blank in enumerate(blanks):
-        user_val  = (user_answers[i] if i < len(user_answers) else "").strip()
-        correct   = blank.get("answer", "").strip()
-        is_correct = user_val.lower() == correct.lower()
+        user_val   = user_answers[i] if i < len(user_answers) else ""
+        correct    = blank.get("answer", "")
+        is_correct = _normalize(user_val) == _normalize(correct)
 
         if not is_correct:
             all_correct = False
@@ -104,7 +153,7 @@ def check_answer(question: dict, user_answers: list) -> dict:
         results.append({
             "blank_id":       blank["id"],
             "is_correct":     is_correct,
-            "correct_answer": correct,
+            "correct_answer": correct.strip(),
         })
 
     return {"all_correct": all_correct, "blank_results": results}
