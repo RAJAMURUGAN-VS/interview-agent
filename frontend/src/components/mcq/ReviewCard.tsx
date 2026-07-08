@@ -26,23 +26,39 @@ export default function ReviewCard({ question, answer, index }: Props) {
       </div>
 
       {/* User's answer */}
-      <div className={`flex items-center gap-2 text-sm px-3 py-2
-        rounded-lg border
-        ${answer.is_correct
-          ? 'bg-[#22c55e]/10 border-[#22c55e]/20 text-[#22c55e]'
-          : 'bg-[#ef4444]/10 border-[#ef4444]/20 text-[#ef4444]'}`}>
-        <i className={`fas ${answer.is_correct ? 'fa-circle-check' : 'fa-circle-xmark'}`} />
-        <span className="font-medium">Your answer:</span>
-        <span>{selectedOption?.text ?? answer.selected_label}</span>
-      </div>
+      {answer.status === 'timeout' ? (
+        <div className="flex items-center gap-2 text-sm px-3 py-2
+          rounded-lg border bg-[#8b8ba8]/8 border-[#8b8ba8]/20 text-[#8b8ba8]">
+          <i className="fas fa-clock" />
+          <span className="font-medium">Time expired — no answer submitted</span>
+        </div>
+      ) : (
+        <div className={`flex items-center gap-2 text-sm px-3 py-2
+          rounded-lg border
+          ${answer.is_correct
+            ? 'bg-[#22c55e]/10 border-[#22c55e]/20 text-[#22c55e]'
+            : 'bg-[#ef4444]/10 border-[#ef4444]/20 text-[#ef4444]'}`}>
+          <i className={`fas ${answer.is_correct ? 'fa-circle-check' : 'fa-circle-xmark'}`} />
+          <span className="font-medium">Your answer:</span>
+          <span>
+            {question.type === 'fillup'
+              ? answer.fill_input || '(no answer)'
+              : selectedOption?.text ?? answer.selected_label}
+          </span>
+        </div>
+      )}
 
-      {/* Correct answer — only when wrong */}
-      {!answer.is_correct && (
+      {/* Correct answer — only when wrong and not timeout */}
+      {!answer.is_correct && answer.status !== 'timeout' && (
         <div className="flex items-center gap-2 text-sm px-3 py-2
           rounded-lg border bg-[#22c55e]/10 border-[#22c55e]/20 text-[#22c55e]">
           <i className="fas fa-circle-check" />
           <span className="font-medium">Correct answer:</span>
-          <span>{correctOption?.text ?? question.correct_label}</span>
+          <span>
+            {question.type === 'fillup'
+              ? question.correct_label
+              : correctOption?.text ?? question.correct_label}
+          </span>
         </div>
       )}
 

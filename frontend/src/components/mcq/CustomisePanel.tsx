@@ -1,4 +1,4 @@
-import type { McqQuestionType, McqQuestionCount } from '../../types';
+import type { McqQuestionType, McqQuestionCount, McqTimerConfig, McqTimerMode } from '../../types';
 
 const COUNT_OPTIONS: McqQuestionCount[] = [5, 10, 15, 20];
 
@@ -6,14 +6,16 @@ interface Props {
   topic: string;
   questionCount: McqQuestionCount;
   questionType: McqQuestionType;
+  timerConfig: McqTimerConfig;
   onTopicChange: (v: string) => void;
   onCountChange: (v: McqQuestionCount) => void;
   onTypeChange:  (v: McqQuestionType) => void;
+  onTimerChange: (patch: Partial<McqTimerConfig>) => void;
 }
 
 export default function CustomisePanel({
-  topic, questionCount, questionType,
-  onTopicChange, onCountChange, onTypeChange,
+  topic, questionCount, questionType, timerConfig,
+  onTopicChange, onCountChange, onTypeChange, onTimerChange,
 }: Props) {
   return (
     <div className="card flex flex-col gap-5">
@@ -65,12 +67,13 @@ export default function CustomisePanel({
           {([
             { value: 'mcq',       label: 'MCQ (4 options)', icon: 'fas fa-list-ul' },
             { value: 'truefalse', label: 'True / False',    icon: 'fas fa-toggle-on' },
+            { value: 'fillup',    label: 'Fill in Blank',   icon: 'fas fa-pen-to-square' },
           ] as { value: McqQuestionType; label: string; icon: string }[]).map((opt) => (
             <button
               key={opt.value}
               onClick={() => onTypeChange(opt.value)}
-              className={`flex-1 flex items-center justify-center gap-2
-                px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200
+              className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2
+                rounded-lg text-xs font-medium transition-all duration-200
                 ${questionType === opt.value
                   ? 'bg-[#4f46e5] text-white shadow-[0_0_12px_rgba(79,70,229,0.3)]'
                   : 'text-[#8b8ba8] hover:text-[#f0f0ff]'}`}
@@ -80,6 +83,120 @@ export default function CustomisePanel({
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Timer */}
+      <div className="flex flex-col gap-3">
+        <label className="text-xs uppercase tracking-widest text-[#8b8ba8]
+          font-medium">
+          Timer
+        </label>
+
+        {/* Mode selector */}
+        <div className="flex gap-1 bg-[#0a0a0f] rounded-xl p-1
+          border border-[#2a2a3d]">
+          {([
+            { value: 'none',         label: 'No Timer' },
+            { value: 'per-question', label: 'Per Question' },
+            { value: 'full-quiz',    label: 'Full Quiz' },
+          ] as { value: McqTimerMode; label: string }[]).map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => onTimerChange({ mode: opt.value })}
+              className={`flex-1 py-1.5 rounded-lg text-xs font-medium
+                transition-all duration-200
+                ${timerConfig.mode === opt.value
+                  ? 'bg-[#4f46e5] text-white'
+                  : 'text-[#8b8ba8] hover:text-[#f0f0ff]'}`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Per-question presets */}
+        {timerConfig.mode === 'per-question' && (
+          <div className="flex flex-col gap-2 animate-fade-in">
+            <p className="text-xs text-[#4a4a6a]">Seconds per question:</p>
+            <div className="flex gap-2 flex-wrap">
+              {([10, 20, 30, 45, 60] as number[]).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => onTimerChange({ perQuestionSecs: s })}
+                  className={`px-3 py-1.5 rounded-lg border text-xs font-medium
+                    transition-all duration-200
+                    ${timerConfig.perQuestionSecs === s
+                      ? 'bg-[#4f46e5]/10 border-[#4f46e5] text-[#4f46e5]'
+                      : 'border-[#2a2a3d] text-[#8b8ba8] hover:border-[#4f46e5]'}`}
+                >
+                  {s}s
+                </button>
+              ))}
+              {/* Custom input */}
+              <div className="flex items-center gap-1">
+                <input
+                  type="number"
+                  min={5}
+                  max={300}
+                  value={
+                    [10, 20, 30, 45, 60].includes(timerConfig.perQuestionSecs)
+                      ? '' : timerConfig.perQuestionSecs
+                  }
+                  onChange={(e) =>
+                    onTimerChange({ perQuestionSecs: Number(e.target.value) || 30 })
+                  }
+                  placeholder="Custom"
+                  className="w-20 bg-[#1c1c27] border border-[#2a2a3d]
+                    focus:border-[#4f46e5] rounded-lg px-2 py-1.5 text-xs
+                    text-[#f0f0ff] placeholder-[#4a4a6a] outline-none"
+                />
+                <span className="text-xs text-[#4a4a6a]">sec</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Full-quiz presets */}
+        {timerConfig.mode === 'full-quiz' && (
+          <div className="flex flex-col gap-2 animate-fade-in">
+            <p className="text-xs text-[#4a4a6a]">Total quiz time:</p>
+            <div className="flex gap-2 flex-wrap">
+              {([5, 10, 15, 20] as number[]).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => onTimerChange({ fullQuizMins: m })}
+                  className={`px-3 py-1.5 rounded-lg border text-xs font-medium
+                    transition-all duration-200
+                    ${timerConfig.fullQuizMins === m
+                      ? 'bg-[#4f46e5]/10 border-[#4f46e5] text-[#4f46e5]'
+                      : 'border-[#2a2a3d] text-[#8b8ba8] hover:border-[#4f46e5]'}`}
+                >
+                  {m}m
+                </button>
+              ))}
+              {/* Custom input */}
+              <div className="flex items-center gap-1">
+                <input
+                  type="number"
+                  min={1}
+                  max={120}
+                  value={
+                    [5, 10, 15, 20].includes(timerConfig.fullQuizMins)
+                      ? '' : timerConfig.fullQuizMins
+                  }
+                  onChange={(e) =>
+                    onTimerChange({ fullQuizMins: Number(e.target.value) || 10 })
+                  }
+                  placeholder="Custom"
+                  className="w-20 bg-[#1c1c27] border border-[#2a2a3d]
+                    focus:border-[#4f46e5] rounded-lg px-2 py-1.5 text-xs
+                    text-[#f0f0ff] placeholder-[#4a4a6a] outline-none"
+                />
+                <span className="text-xs text-[#4a4a6a]">min</span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

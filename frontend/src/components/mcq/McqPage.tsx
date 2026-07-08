@@ -6,6 +6,7 @@ import FeedbackView  from './FeedbackView';
 import CustomisePanel from './CustomisePanel';
 import TextUpload    from './TextUpload';
 import PdfUpload     from './PdfUpload';
+import UrlInput      from './UrlInput';
 import ReviewCard    from './ReviewCard';
 import type { McqSourceType, McqQuestionType, McqQuestionCount, McqReviewFilter } from '../../types';
 
@@ -58,15 +59,17 @@ export default function McqPage() {
                 </p>
                 {/* Source toggle */}
                 <div className="flex gap-1 bg-[#0a0a0f] rounded-xl p-1
-                  border border-[#2a2a3d] w-fit mb-4">
+                  border border-[#2a2a3d] w-fit mb-4 flex-wrap">
                   {([
-                    { value: 'text', label: 'Paste Text', icon: 'fas fa-keyboard' },
-                    { value: 'pdf',  label: 'Upload PDF', icon: 'fas fa-file-pdf' },
+                    { value: 'text',  label: 'Paste Text', icon: 'fas fa-keyboard' },
+                    { value: 'pdf',   label: 'Upload PDF', icon: 'fas fa-file-pdf' },
+                    { value: 'topic', label: 'By Topic',   icon: 'fas fa-lightbulb' },
+                    { value: 'url',   label: 'From URL',   icon: 'fas fa-globe' },
                   ] as { value: McqSourceType; label: string; icon: string }[]).map((opt) => (
                     <button
                       key={opt.value}
                       onClick={() => mcq.setSourceType(opt.value)}
-                      className={`flex items-center gap-2 px-4 py-2 rounded-lg
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg
                         text-sm font-medium transition-all duration-200
                         ${mcq.config.source_type === opt.value
                           ? 'bg-[#4f46e5] text-white shadow-[0_0_12px_rgba(79,70,229,0.3)]'
@@ -80,7 +83,36 @@ export default function McqPage() {
 
                 {mcq.config.source_type === 'text'
                   ? <TextUpload value={mcq.textContent} onChange={mcq.setTextContent} disabled={mcq.isGenerating} />
-                  : <PdfUpload  file={mcq.pdfFile}  onFileSelect={mcq.setPdfFile} disabled={mcq.isGenerating} />}
+                  : mcq.config.source_type === 'pdf'
+                  ? <PdfUpload  file={mcq.pdfFile}  onFileSelect={mcq.setPdfFile} disabled={mcq.isGenerating} />
+                  : mcq.config.source_type === 'topic'
+                  ? <div className="flex flex-col gap-2">
+                      <label className="text-xs uppercase tracking-widest text-[#8b8ba8]
+                        font-medium">
+                        Topic Name
+                      </label>
+                      <input
+                        type="text"
+                        value={mcq.config.topic}
+                        onChange={(e) => mcq.setTopic(e.target.value)}
+                        disabled={mcq.isGenerating}
+                        placeholder="e.g. Binary Search Trees, SQL Joins, OOP in Java…"
+                        className="bg-[#1c1c27] border border-[#2a2a3d] focus:border-[#4f46e5]
+                          rounded-xl px-4 py-3 text-sm text-[#f0f0ff] placeholder-[#4a4a6a]
+                          outline-none transition-colors duration-200 disabled:opacity-40"
+                      />
+                      <p className="text-xs text-[#4a4a6a]">
+                        <i className="fas fa-info-circle mr-1" />
+                        AI will generate questions from its own knowledge on this topic.
+                      </p>
+                    </div>
+                  : mcq.config.source_type === 'url'
+                  ? <UrlInput
+                      urls={mcq.urlList}
+                      onChange={mcq.setUrlList}
+                      disabled={mcq.isGenerating}
+                    />
+                  : null}
               </div>
             </div>
 
@@ -90,9 +122,11 @@ export default function McqPage() {
                 topic={mcq.config.topic}
                 questionCount={mcq.config.question_count}
                 questionType={mcq.config.question_type}
+                timerConfig={mcq.timerConfig}
                 onTopicChange={mcq.setTopic}
                 onCountChange={mcq.setQuestionCount}
                 onTypeChange={mcq.setQuestionType}
+                onTimerChange={mcq.updateTimerConfig}
               />
 
               {mcq.generateError && (
@@ -101,13 +135,32 @@ export default function McqPage() {
                 </p>
               )}
 
+              {mcq.failedUrls.length > 0 && (
+                <div className="text-xs text-[#f59e0b] bg-[#f59e0b]/8
+                  border border-[#f59e0b]/20 rounded-xl px-4 py-3">
+                  <i className="fas fa-triangle-exclamation mr-2" />
+                  Could not extract content from {mcq.failedUrls.length} URL(s):
+                  <ul className="mt-1 ml-4 list-disc">
+                    {mcq.failedUrls.map((u) => (
+                      <li key={u} className="truncate">{u}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               <button
                 onClick={mcq.handleGenerate}
                 disabled={
                   mcq.isGenerating ||
                   (mcq.config.source_type === 'text'
                     ? mcq.textContent.trim().length < 100
-                    : mcq.pdfFile === null)
+                    : mcq.config.source_type === 'pdf'
+                    ? mcq.pdfFile === null
+                    : mcq.config.source_type === 'topic'
+                    ? mcq.config.topic.trim().length === 0
+                    : mcq.config.source_type === 'url'
+                    ? mcq.urlList.length === 0
+                    : true)
                 }
                 className="w-full py-3 rounded-xl bg-[#4f46e5] hover:bg-[#4338ca]
                   text-white font-semibold text-sm transition-all duration-200
@@ -137,6 +190,10 @@ export default function McqPage() {
                 isLast={mcq.isLastQuestion}
                 onSelect={mcq.handleSelectOption}
                 onNext={mcq.handleNext}
+                timerConfig={mcq.timerConfig}
+                timeRemaining={mcq.timeRemaining}
+                fillInput={mcq.fillInput}
+                onFillChange={mcq.setFillInput}
               />
             </div>
 

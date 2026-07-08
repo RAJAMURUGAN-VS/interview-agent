@@ -78,12 +78,22 @@ export interface AskTextResponse {
 
 // ── MCQ ───────────────────────────────────────────────
 
-export type McqQuestionType  = 'mcq' | 'truefalse';
+export type McqQuestionType  = 'mcq' | 'truefalse' | 'fillup';
 export type McqQuestionCount = 5 | 10 | 15 | 20;
-export type McqSourceType    = 'text' | 'pdf';
+export type McqSourceType    = 'text' | 'pdf' | 'topic' | 'url';
 export type McqReviewFilter  = 'all' | 'correct' | 'wrong';
 export type McqPhase         = 'setup' | 'quiz' | 'feedback';
 export type McqGrade         = 'Excellent' | 'Good' | 'Needs Revision' | 'Poor';
+export type McqTimerMode     = 'none' | 'per-question' | 'full-quiz';
+export type McqPerQuestionPreset = 10 | 20 | 30 | 45 | 60 | 'custom';
+export type McqFullQuizPreset    = 5  | 10 | 15 | 20 | 'custom';
+export type McqAnswerStatus  = 'answered' | 'skipped' | 'timeout';
+
+export interface McqTimerConfig {
+  mode:              McqTimerMode;
+  perQuestionSecs:   number;   // used when mode === 'per-question'
+  fullQuizMins:      number;   // used when mode === 'full-quiz'
+}
 
 export interface McqOption {
   label: string;
@@ -100,9 +110,11 @@ export interface McqQuestion {
 }
 
 export interface McqAnswer {
-  question_id: string;
-  selected_label: string;
-  is_correct: boolean;
+  question_id:    string;
+  selected_label: string;      // empty string if timeout/skipped
+  fill_input:     string;      // filled text for fillup type
+  is_correct:     boolean;
+  status:         McqAnswerStatus;
 }
 
 export interface McqSessionConfig {
@@ -126,6 +138,7 @@ export interface McqGenerateResponse {
   success: boolean;
   questions?: McqQuestion[];
   error?: string;
+  failed_urls?: string[];
 }
 
 export interface McqFeedbackResponse {
