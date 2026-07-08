@@ -3,11 +3,14 @@ import tempfile
 import os
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.chat_models import init_chat_model
+from tavily import TavilyClient
 from ..config import Config
 from ..utils.mcq_prompts import (
     MCQ_GENERATION_PROMPT,
     MCQ_SCHEMA,
     TF_SCHEMA,
+    FILLUP_SCHEMA,
+    TOPIC_ONLY_PREFIX,
     MCQ_FEEDBACK_PROMPT,
 )
 
@@ -35,16 +38,59 @@ def extract_text_from_pdf(file_bytes: bytes) -> str:
         os.unlink(tmp_path)
 
 
+def extract_content_from_urls(urls: list[str]) -> tuple[str, list[str]]:
+    """
+    Extract text content from a list of URLs using Tavily Search API.
+    Returns (merged_content_string, list_of_failed_urls).
+
+    Uses TavilyClient.extract() which is designed specifically for
+    content extraction from URLs (not search). Each URL is extracted
+    individually. Failed URLs are collected and returned for user warning.
+    Content from all successful URLs is merged with a separator.
+    """
+    client = TavilyClient(api_key=Config.TAVILY_API_KEY)
+    extracted_parts = []
+    failed_urls = []
+
+    for url in urls:
+        url = url.strip()
+        if not url:
+            continue
+        try:
+            result = client.extract(urls=[url])
+            # Tavily extract returns { "results": [{ "url", "raw_content" }] }
+            results = result.get("results", [])
+            if results and results[0].get("raw_content"):
+                extracted_parts.append(
+                    f"--- Content from {url} ---\n"
+                    f"{results[0]['raw_content'][:8000]}"
+                )
+            else:
+                failed_urls.append(url)
+        except Exception:
+            failed_urls.append(url)
+
+    merged = "\n\n".join(extracted_parts)
+    return merged, failed_urls
+
+
 def _build_generation_prompt(
     content: str,
     question_count: int,
     topic: str,
     question_type: str,
+    source_type: str = "text",   # "text" | "pdf" | "topic" | "url"
 ) -> str:
+    """
+    Fill MCQ_GENERATION_PROMPT template with runtime values.
+    Handles all four source types:
+      - text/pdf/url: wraps content in "Study notes:" block
+      - topic: uses TOPIC_ONLY_PREFIX instead (no content block)
+    """
     topic_instruction = (
         f"Focus ONLY on the topic: '{topic}'"
         if topic.strip()
-        else "Cover a balanced mix of the most important topics in the notes"
+        else "Cover a balanced mix of the most important topics in the content"
     )
 
     if question_type == "mcq":
@@ -54,7 +100,7 @@ def _build_generation_prompt(
             "Only one option must be correct."
         )
         schema = MCQ_SCHEMA
-    else:  # truefalse
+    elif question_type == "truefalse":
         type_instruction = "True or False statements"
         format_instruction = (
             "Each question must be a clear factual statement "
@@ -62,10 +108,28 @@ def _build_generation_prompt(
             "Mix roughly equal true and false answers."
         )
         schema = TF_SCHEMA
+    else:  # fillup
+        type_instruction = "Fill-in-the-blank questions"
+        format_instruction = (
+            "Each question must be a sentence or definition with exactly one "
+            "key word or short phrase replaced by _______. "
+            "The correct_label must be the single missing word or short phrase. "
+            "The options array must be empty []."
+        )
+        schema = FILLUP_SCHEMA
+
+    # Build content_section based on source type
+    if source_type == "topic":
+        content_section = TOPIC_ONLY_PREFIX.format(topic=topic)
+        # Override topic_instruction — topic IS the subject
+        topic_instruction = f"The entire quiz is about: '{topic}'"
+    else:
+        # text, pdf, or url — all provide content
+        content_section = f"Study notes:\n\"\"\"\n{content[:12000]}\n\"\"\""
 
     return MCQ_GENERATION_PROMPT.format(
         question_count=question_count,
-        content=content[:12000],
+        content_section=content_section,
         topic_instruction=topic_instruction,
         type_instruction=type_instruction,
         format_instruction=format_instruction,
@@ -78,12 +142,15 @@ def generate_questions(
     question_count: int,
     topic: str,
     question_type: str,
+    source_type: str = "text",   # ← add this parameter
 ) -> list:
     """
-    Call the LLM to generate MCQ questions from provided content.
-    Returns a list of question dicts matching MCQ_SCHEMA or TF_SCHEMA.
+    Call the LLM to generate MCQ/True-False/Fill-up questions.
+    source_type controls how content_section is built in the prompt.
     """
-    prompt = _build_generation_prompt(content, question_count, topic, question_type)
+    prompt = _build_generation_prompt(
+        content, question_count, topic, question_type, source_type
+    )
     messages = [{"role": "user", "content": prompt}]
     response = _model.invoke(messages)
     raw = response.content.strip()
