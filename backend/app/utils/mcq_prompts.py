@@ -1,11 +1,8 @@
 MCQ_GENERATION_PROMPT = """You are an expert question setter for CSE technical interviews and placement exams.
 
-Given the following study notes, generate exactly {question_count} questions.
+Given the following content, generate exactly {question_count} questions.
 
-Study notes:
-\"\"\"
-{content}
-\"\"\"
+{content_section}
 
 Topic focus: {topic_instruction}
 Question type: {type_instruction}
@@ -13,7 +10,7 @@ Question type: {type_instruction}
 STRICT OUTPUT RULES:
 - Respond with a single valid JSON array and nothing else
 - No markdown, no code fences, no explanation text outside the JSON
-- Every question must be directly answerable from the notes above
+- Every question must be directly based on the content or topic above
 - Do not repeat questions
 
 {format_instruction}
@@ -47,6 +44,21 @@ TF_SCHEMA = """{{
   "correct_label": "<True|False>",
   "explanation": "<1-2 sentence explanation>"
 }}"""
+
+FILLUP_SCHEMA = """{{
+  "id": "<unique string like q1, q2, ...>",
+  "type": "fillup",
+  "question": "<sentence or definition with _______ where the key word is missing>",
+  "options": [],
+  "correct_label": "<exact word or short phrase that fills the blank>",
+  "explanation": "<1-2 sentence explanation of why this is the correct answer>"
+}}"""
+
+TOPIC_ONLY_PREFIX = """You are an expert question setter. Generate questions purely from your knowledge about the following topic. Do not reference any external document or URL.
+
+Topic: {topic}
+
+"""
 
 MCQ_FEEDBACK_PROMPT = """A student just completed a {question_count}-question {type_label} quiz on the topic: "{topic}".
 
