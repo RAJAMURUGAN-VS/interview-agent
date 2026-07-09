@@ -12,10 +12,15 @@ bp = Blueprint('interview', __name__)
 def start_interview():
     data = request.json
     subject = data.get("subject", "Python")
+    department = data.get("department", "Engineering")
     agent_service.reset_agent(subject)
+    agent_service.session.current_department = department
 
     config = {"configurable": {"thread_id": agent_service.session.thread_id}}
-    formatted_prompt = INTERVIEW_PROMPT.format(subject=agent_service.session.current_subject)
+    formatted_prompt = INTERVIEW_PROMPT.format(
+        department=agent_service.session.current_department,
+        subject=agent_service.session.current_subject
+    )
     response = agent_service.invoke_agent({
         "messages": [
             {"role": "system", "content": formatted_prompt},

@@ -9,11 +9,12 @@ from ..config import Config
 class SessionState:
     question_count: int
     current_subject: str
+    current_department: str
     thread_id: str
     pronunciation_log: list = field(default_factory=list)
 
 
-session = SessionState(0, "", "interview_session")
+session = SessionState(0, "", "", "interview_session")
 
 model = init_chat_model(
     "google_genai:gemini-2.5-flash",
@@ -27,6 +28,7 @@ checkpointer = None
 def reset_agent(subject: str):
     global agent, checkpointer
     session.current_subject = subject
+    session.current_department = ""
     session.question_count = 1
     session.pronunciation_log = []
     checkpointer = InMemorySaver()
