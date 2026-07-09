@@ -1,9 +1,11 @@
 // Core subject types
-export type InterviewSubject =
-  | 'Operating System'
-  | 'Object Oriented Programming'
-  | 'Database Management System'
-  | 'Computer Networks';
+export type InterviewSubject = string; // This allows any subject string — preset or custom.
+// The taxonomy is enforced by the UI, not the type system.
+
+// Import and re-export DepartmentKey for convenience
+export type { DepartmentKey } from '../data/departmentSubjects';
+
+export type InterviewSelectionStep = 'department' | 'subject';
 
 export type NotesSubject = 'OS' | 'OOP' | 'DBMS' | 'CN';
 
