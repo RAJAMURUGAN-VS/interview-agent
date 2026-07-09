@@ -1,4 +1,4 @@
-import type { InterviewSubject, InterviewPhase, FeedbackData } from '../../types';
+import type { InterviewSubject, InterviewPhase, FeedbackData, DepartmentKey } from '../../types';
 import SubjectSelector from './SubjectSelector';
 import QuestionTracker from './QuestionTracker';
 import SpeakingBubble from './SpeakingBubble';
@@ -10,6 +10,8 @@ import FeedbackSection from '../feedback/FeedbackSection';
 interface Props {
   phase: InterviewPhase;
   currentSubject: InterviewSubject | null;
+  selectionStep: 'department' | 'subject';
+  selectedDeptKey: DepartmentKey | null;
   questionNumber: number;
   recordingStatus: string;
   isSpeaking: boolean;
@@ -18,6 +20,8 @@ interface Props {
   feedbackData: FeedbackData | null;
   isFeedbackLoading: boolean;
   selectSubject: (s: InterviewSubject) => void;
+  handleSelectDepartment: (key: DepartmentKey) => void;
+  handleBackToDepts: () => void;
   startInterview: () => void;
   toggleRecording: () => void;
   submitAnswer: () => void;
@@ -28,10 +32,10 @@ interface Props {
 
 export default function InterviewPanel(props: Props) {
   const {
-    phase, currentSubject, questionNumber, recordingStatus,
+    phase, currentSubject, selectionStep, selectedDeptKey, questionNumber, recordingStatus,
     isSpeaking, isRecording, recordedBlob,
     feedbackData, isFeedbackLoading,
-    selectSubject, startInterview, toggleRecording,
+    selectSubject, handleSelectDepartment, handleBackToDepts, startInterview, toggleRecording,
     submitAnswer, endInterview, getFeedback, resetInterview,
   } = props;
 
@@ -39,8 +43,11 @@ export default function InterviewPanel(props: Props) {
   if (phase === 'welcome' && !currentSubject) {
     return (
       <SubjectSelector
-        onSelect={selectSubject}
-        activeSubject={currentSubject}
+        selectionStep={selectionStep}
+        selectedDeptKey={selectedDeptKey}
+        onSelectDept={handleSelectDepartment}
+        onSelectSubject={selectSubject}
+        onBackToDepts={handleBackToDepts}
       />
     );
   }
