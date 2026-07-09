@@ -1,41 +1,58 @@
-import type { InterviewSubject } from '../../types';
+import { getDepartmentForSubject } from '../../data/departmentSubjects';
 
-const SUBJECT_CONFIG: Record<InterviewSubject, {
-  icon: string; colorClass: string; bgClass: string; borderClass: string; short: string;
-}> = {
-  'Operating System': {
-    icon: 'fas fa-microchip',
-    colorClass: 'subject-os', bgClass: 'bg-os', borderClass: 'border-os',
-    short: 'OS',
-  },
-  'Object Oriented Programming': {
-    icon: 'fas fa-cube',
-    colorClass: 'subject-oop', bgClass: 'bg-oop', borderClass: 'border-oop',
-    short: 'OOP',
-  },
-  'Database Management System': {
-    icon: 'fas fa-database',
-    colorClass: 'subject-dbms', bgClass: 'bg-dbms', borderClass: 'border-dbms',
-    short: 'DBMS',
-  },
-  'Computer Networks': {
-    icon: 'fas fa-network-wired',
-    colorClass: 'subject-cn', bgClass: 'bg-cn', borderClass: 'border-cn',
-    short: 'CN',
-  },
+interface BadgeProps {
+  subject: string;
+}
+
+// Fallback config when subject is not in any department (e.g. custom)
+const FALLBACK = {
+  icon: 'fas fa-graduation-cap',
+  color: 'text-[#4f46e5]',
+  bgColor: 'bg-[#4f46e5]/10',
+  borderColor: 'border-[#4f46e5]',
 };
 
-interface BadgeProps { subject: InterviewSubject; }
+// Special config for self-introduction
+const SELF_INTRO_CONFIG = {
+  icon: 'fas fa-user-tie',
+  color: 'text-[#38bdf8]',
+  bgColor: 'bg-[#38bdf8]/10',
+  borderColor: 'border-[#38bdf8]',
+};
 
 export default function Badge({ subject }: BadgeProps) {
-  const cfg = SUBJECT_CONFIG[subject];
+  // Self-introduction special case
+  if (
+    subject.toLowerCase().includes('self') ||
+    subject.toLowerCase().includes('introduction')
+  ) {
+    return (
+      <span className={`inline-flex items-center gap-2 px-3 py-1.5
+        rounded-lg border text-sm font-medium
+        ${SELF_INTRO_CONFIG.bgColor}
+        ${SELF_INTRO_CONFIG.borderColor}
+        ${SELF_INTRO_CONFIG.color}`}>
+        <i className={SELF_INTRO_CONFIG.icon} />
+        {subject}
+      </span>
+    );
+  }
+
+  // Look up department for this subject
+  const dept = getDepartmentForSubject(subject);
+  const cfg = dept ?? FALLBACK;
+
+  // Use dept icon if found; otherwise fallback icon
+  const icon = dept?.icon ?? FALLBACK.icon;
+
   return (
-    <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg
-      border text-sm font-medium ${cfg.bgClass} ${cfg.borderClass} ${cfg.colorClass}`}>
-      <i className={cfg.icon} />
+    <span className={`inline-flex items-center gap-2 px-3 py-1.5
+      rounded-lg border text-sm font-medium
+      ${cfg.bgColor} ${cfg.borderColor} ${cfg.color}`}>
+      <i className={icon} />
       {subject}
     </span>
   );
 }
 
-export { SUBJECT_CONFIG };
+export { FALLBACK, SELF_INTRO_CONFIG };
