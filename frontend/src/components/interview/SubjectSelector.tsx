@@ -1,69 +1,35 @@
-import { SUBJECT_CONFIG } from '../ui/Badge';
-import type { InterviewSubject } from '../../types';
-
-const SUBJECTS: InterviewSubject[] = [
-  'Operating System',
-  'Object Oriented Programming',
-  'Database Management System',
-  'Computer Networks',
-];
+import type { DepartmentKey } from '../../data/departmentSubjects';
+import { getDepartmentByKey } from '../../data/departmentSubjects';
+import DepartmentSelector from './DepartmentSelector';
+import SubjectGrid from './SubjectGrid';
 
 interface Props {
-  onSelect: (subject: InterviewSubject) => void;
-  activeSubject: InterviewSubject | null;
+  selectionStep: 'department' | 'subject';
+  selectedDeptKey: DepartmentKey | null;
+  onSelectDept: (key: DepartmentKey) => void;
+  onSelectSubject: (subject: string) => void;
+  onBackToDepts: () => void;
 }
 
-export default function SubjectSelector({ onSelect, activeSubject }: Props) {
-  return (
-    <div className="animate-fade-in">
-      {/* Header */}
-      <div className="text-center mb-10">
-        <p className="text-xs font-medium uppercase tracking-widest
-          text-[#4f46e5] mb-3">
-          Mock Technical Interview
-        </p>
-        <h1 className="text-3xl font-bold text-[#f0f0ff] mb-3 tracking-tight">
-          Choose Your Subject
-        </h1>
-        <p className="text-[#8b8ba8] text-sm max-w-sm mx-auto">
-          Select a core CSE subject to begin your placement interview session
-          with AI interviewer Natalie
-        </p>
-      </div>
+export default function SubjectSelector({
+  selectionStep,
+  selectedDeptKey,
+  onSelectDept,
+  onSelectSubject,
+  onBackToDepts,
+}: Props) {
+  if (selectionStep === 'department' || !selectedDeptKey) {
+    return <DepartmentSelector onSelect={onSelectDept} />;
+  }
 
-      {/* Subject grid */}
-      <div className="grid grid-cols-2 gap-4">
-        {SUBJECTS.map((subject) => {
-          const cfg = SUBJECT_CONFIG[subject];
-          const isActive = activeSubject === subject;
-          return (
-            <button
-              key={subject}
-              onClick={() => onSelect(subject)}
-              className={`relative text-left p-5 rounded-2xl border
-                transition-all duration-200 group
-                ${isActive
-                  ? `${cfg.bgClass} ${cfg.borderClass} shadow-lg`
-                  : 'bg-[#13131a] border-[#2a2a3d] hover:border-[#4f46e5] hover:bg-[#1c1c27]'}`}
-            >
-              {isActive && (
-                <div className={`absolute left-0 top-4 bottom-4 w-0.5
-                  rounded-full ${cfg.borderClass.replace('border-', 'bg-')}`} />
-              )}
-              <div className={`text-2xl mb-3 ${cfg.colorClass}`}>
-                <i className={cfg.icon} />
-              </div>
-              <div className="font-semibold text-[#f0f0ff] text-sm mb-1">
-                {subject}
-              </div>
-              <div className={`text-xs font-medium uppercase tracking-wider
-                ${isActive ? cfg.colorClass : 'text-[#4a4a6a]'}`}>
-                {cfg.short}
-              </div>
-            </button>
-          );
-        })}
-      </div>
-    </div>
+  const department = getDepartmentByKey(selectedDeptKey);
+  if (!department) return null;
+
+  return (
+    <SubjectGrid
+      department={department}
+      onSelect={onSelectSubject}
+      onBack={onBackToDepts}
+    />
   );
 }
