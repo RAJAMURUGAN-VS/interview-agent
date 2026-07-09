@@ -3,16 +3,14 @@ import { useMediaRecorder } from './useMediaRecorder';
 import { useAudioStream } from './useAudioStream';
 import * as interviewApi from '../api/interviewApi';
 import { useAppStore } from '../store/appStore';
-import type { InterviewSubject, InterviewPhase, FeedbackData, InterviewSelectionStep, DepartmentKey } from '../types';
+import type { InterviewPhase, FeedbackData, DepartmentKey } from '../types';
 import { getDepartmentByKey } from '../data/departmentSubjects';
 
-export function useInterview(initialSubject?: InterviewSubject) {
+export function useInterview() {
   const [phase, setPhase] = useState<InterviewPhase>('welcome');
-  const [currentSubject, setCurrentSubject] = useState<InterviewSubject | null>(
-    initialSubject ?? null
-  );
-  const [selectionStep, setSelectionStep] = useState<InterviewSelectionStep>('department');
-  const [selectedDeptKey, setSelectedDeptKey] = useState<DepartmentKey | null>(null);
+  const [selectedDeptKey, setSelectedDeptKey] = useState<DepartmentKey>('cse');
+  const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
+  const [customSubjectInput, setCustomSubjectInput] = useState('');
   const [questionNumber, setQuestionNumber] = useState(1);
   const [recordingStatus, setRecordingStatus] = useState('Click Start Interview to begin');
   const [feedbackData, setFeedbackData] = useState<FeedbackData | null>(null);
@@ -23,35 +21,32 @@ export function useInterview(initialSubject?: InterviewSubject) {
   const store = useAppStore();
 
   const handleSelectDepartment = useCallback((key: DepartmentKey) => {
-    const dept = getDepartmentByKey(key);
-    if (!dept) return;
-
     setSelectedDeptKey(key);
-
-    // Self-introduction is a special case — skip subject step
+    setCustomSubjectInput('');
     if (key === 'self-intro') {
-      // Directly start interview with "Self Introduction" as subject
-      selectSubject('Self Introduction', key);
+      setSelectedSubjects(['Self Introduction']);
     } else {
-      setSelectionStep('subject');
+      setSelectedSubjects([]);
     }
   }, []);
 
-  const selectSubject = useCallback((subject: InterviewSubject, departmentKey?: DepartmentKey) => {
-    setCurrentSubject(subject);
-    if (departmentKey) setSelectedDeptKey(departmentKey);
-    setSelectionStep('department');
-    setPhase('welcome');
-    setQuestionNumber(1);
-    setRecordingStatus('Click Start Interview to begin');
-    setFeedbackData(null);
-    setIsFeedbackLoading(false);
-    store.setSubject(subject);
-  }, [store]);
+  const toggleSubject = useCallback((subject: string) => {
+    setSelectedSubjects((prev) =>
+      prev.includes(subject)
+        ? prev.filter((s) => s !== subject)
+        : [...prev, subject]
+    );
+  }, []);
 
-  const handleBackToDepts = useCallback(() => {
-    setSelectionStep('department');
-    setSelectedDeptKey(null);
+  const addCustomSubject = useCallback(() => {
+    const s = customSubjectInput.trim();
+    if (!s) return;
+    setSelectedSubjects((prev) => (prev.includes(s) ? prev : [...prev, s]));
+    setCustomSubjectInput('');
+  }, [customSubjectInput]);
+
+  const removeCustomSubject = useCallback((subject: string) => {
+    setSelectedSubjects((prev) => prev.filter((s) => s !== subject));
   }, []);
 
   async function startInterview() {
@@ -61,7 +56,14 @@ export function useInterview(initialSubject?: InterviewSubject) {
       const departmentLabel = selectedDeptKey
         ? (getDepartmentByKey(selectedDeptKey)?.label ?? 'Engineering')
         : 'Engineering';
-      const response = await interviewApi.startInterview(currentSubject!, departmentLabel);
+      
+      const subjectStr = selectedDeptKey === 'self-intro'
+        ? 'Self Introduction'
+        : selectedSubjects.join(', ');
+
+      store.setSubject(subjectStr);
+
+      const response = await interviewApi.startInterview(subjectStr, departmentLabel);
       setRecordingStatus('Listening...');
       await playStream(response, () => {
         setRecordingStatus('Click to record');
@@ -129,9 +131,9 @@ export function useInterview(initialSubject?: InterviewSubject) {
 
   function resetInterview() {
     setPhase('welcome');
-    setCurrentSubject(null);
-    setSelectionStep('department');
-    setSelectedDeptKey(null);
+    setSelectedDeptKey('cse');
+    setSelectedSubjects([]);
+    setCustomSubjectInput('');
     setQuestionNumber(1);
     setRecordingStatus('Click Start Interview to begin');
     setFeedbackData(null);
@@ -141,9 +143,9 @@ export function useInterview(initialSubject?: InterviewSubject) {
 
   return {
     phase,
-    currentSubject,
-    selectionStep,
     selectedDeptKey,
+    selectedSubjects,
+    customSubjectInput,
     questionNumber,
     recordingStatus,
     feedbackData,
@@ -151,9 +153,11 @@ export function useInterview(initialSubject?: InterviewSubject) {
     isRecording,
     recordedBlob,
     isSpeaking,
-    selectSubject,
     handleSelectDepartment,
-    handleBackToDepts,
+    toggleSubject,
+    addCustomSubject,
+    removeCustomSubject,
+    setCustomSubjectInput,
     startInterview,
     toggleRecording,
     submitAnswer,

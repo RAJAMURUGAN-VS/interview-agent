@@ -1,4 +1,4 @@
-import type { FeedbackResponse, InterviewSubject, SubmitAnswerMeta } from '../types';
+import type { FeedbackResponse, SubmitAnswerMeta } from '../types';
 
 // Empty string = use Vite proxy (relative URLs). Non-empty = direct URL to backend.
 const BASE_URL: string = import.meta.env.VITE_API_URL || '';

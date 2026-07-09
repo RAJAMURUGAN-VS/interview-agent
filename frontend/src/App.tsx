@@ -1,9 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import NavBar from './components/layout/NavBar';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
-import WelcomePage from './pages/WelcomePage';
 import InterviewPage from './pages/InterviewPage';
-import FeedbackPage from './pages/FeedbackPage';
 import NotesSubjectPage from './pages/NotesSubjectPage';
 import PdfChatPage from './pages/PdfChatPage';
 import McqPage from './components/mcq/McqPage';
@@ -22,9 +20,9 @@ export default function App() {
             <Route path="/" element={<Navigate to="/interview" replace />} />
 
             {/* Interview routes */}
-            <Route path="/interview" element={<WelcomePage />} />
-            <Route path="/interview/:subject" element={<InterviewPage />} />
-            <Route path="/interview/:subject/feedback" element={<FeedbackPage />} />
+            <Route path="/interview" element={<InterviewPage />} />
+            <Route path="/interview/:subject" element={<Navigate to="/interview" replace />} />
+            <Route path="/interview/:subject/feedback" element={<Navigate to="/interview" replace />} />
 
             {/* Notes routes */}
             <Route path="/notes" element={<Navigate to="/notes/os" replace />} />

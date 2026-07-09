@@ -1,5 +1,5 @@
-import type { InterviewSubject, InterviewPhase, FeedbackData, DepartmentKey } from '../../types';
-import SubjectSelector from './SubjectSelector';
+import type { InterviewPhase, FeedbackData, DepartmentKey } from '../../types';
+import InterviewSetup from './InterviewSetup';
 import QuestionTracker from './QuestionTracker';
 import SpeakingBubble from './SpeakingBubble';
 import RecordButton from './RecordButton';
@@ -9,9 +9,9 @@ import FeedbackSection from '../feedback/FeedbackSection';
 
 interface Props {
   phase: InterviewPhase;
-  currentSubject: InterviewSubject | null;
-  selectionStep: 'department' | 'subject';
-  selectedDeptKey: DepartmentKey | null;
+  selectedDeptKey: DepartmentKey;
+  selectedSubjects: string[];
+  customSubjectInput: string;
   questionNumber: number;
   recordingStatus: string;
   isSpeaking: boolean;
@@ -19,9 +19,11 @@ interface Props {
   recordedBlob: Blob | null;
   feedbackData: FeedbackData | null;
   isFeedbackLoading: boolean;
-  selectSubject: (s: InterviewSubject) => void;
   handleSelectDepartment: (key: DepartmentKey) => void;
-  handleBackToDepts: () => void;
+  toggleSubject: (subject: string) => void;
+  addCustomSubject: () => void;
+  removeCustomSubject: (subject: string) => void;
+  setCustomSubjectInput: (v: string) => void;
   startInterview: () => void;
   toggleRecording: () => void;
   submitAnswer: () => void;
@@ -32,22 +34,26 @@ interface Props {
 
 export default function InterviewPanel(props: Props) {
   const {
-    phase, currentSubject, selectionStep, selectedDeptKey, questionNumber, recordingStatus,
+    phase, selectedDeptKey, selectedSubjects, customSubjectInput, questionNumber, recordingStatus,
     isSpeaking, isRecording, recordedBlob,
     feedbackData, isFeedbackLoading,
-    selectSubject, handleSelectDepartment, handleBackToDepts, startInterview, toggleRecording,
-    submitAnswer, endInterview, getFeedback, resetInterview,
+    handleSelectDepartment, toggleSubject, addCustomSubject, removeCustomSubject, setCustomSubjectInput,
+    startInterview, toggleRecording, submitAnswer, endInterview, getFeedback, resetInterview,
   } = props;
 
-  // Welcome phase — no subject chosen yet
-  if (phase === 'welcome' && !currentSubject) {
+  // Welcome / Setup phase
+  if (phase === 'welcome') {
     return (
-      <SubjectSelector
-        selectionStep={selectionStep}
+      <InterviewSetup
         selectedDeptKey={selectedDeptKey}
+        selectedSubjects={selectedSubjects}
+        customSubjectInput={customSubjectInput}
         onSelectDept={handleSelectDepartment}
-        onSelectSubject={selectSubject}
-        onBackToDepts={handleBackToDepts}
+        onToggleSubject={toggleSubject}
+        onCustomInputChange={setCustomSubjectInput}
+        onCustomSubjectAdd={addCustomSubject}
+        onCustomSubjectRemove={removeCustomSubject}
+        onStart={startInterview}
       />
     );
   }
@@ -64,67 +70,51 @@ export default function InterviewPanel(props: Props) {
     );
   }
 
-  // Active interview phase + welcome with subject selected
+  const subjectStr = selectedDeptKey === 'self-intro'
+    ? 'Self Introduction'
+    : selectedSubjects.join(', ');
+
+  // Active interview phase
   return (
     <div className="animate-fade-in">
 
       {/* Header row */}
       <div className="flex items-center justify-between flex-wrap gap-2 mb-6 sm:mb-8">
-        {currentSubject && <Badge subject={currentSubject} />}
+        {subjectStr && <Badge subject={subjectStr} />}
         <QuestionTracker questionNumber={questionNumber} />
       </div>
 
       {/* Main interview card */}
       <div className="card mb-4">
 
-        {/* Start prompt */}
-        {phase === 'welcome' && currentSubject && (
-          <div className="text-center py-6 animate-fade-in">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[#1c1c27]
-              border border-[#2a2a3d] flex items-center justify-center">
-              <i className="fas fa-robot text-[#4f46e5] text-2xl" />
-            </div>
-            <h2 className="text-lg font-semibold text-[#f0f0ff] mb-2">
-              Ready to begin?
-            </h2>
-            <p className="text-sm text-[#8b8ba8] mb-6">
-              Natalie will ask you 5 questions on{' '}
-              <span className="text-[#f0f0ff] font-medium">{currentSubject}</span>
-            </p>
-            <Button label="Start Interview" onClick={startInterview} />
-          </div>
-        )}
-
         {/* Active recording view */}
-        {phase === 'active' && (
-          <div className="animate-fade-in">
-            <SpeakingBubble visible={isSpeaking} />
+        <div className="animate-fade-in">
+          <SpeakingBubble visible={isSpeaking} />
 
-            {!isSpeaking && (
-              <div className="flex flex-col items-center gap-6 py-4">
-                <RecordButton
-                  isRecording={isRecording}
-                  disabled={isSpeaking}
-                  onClick={toggleRecording}
-                />
-                <p
-                  role="status"
-                  aria-live="polite"
-                  className="text-sm text-[#8b8ba8] text-center"
-                >
-                  {recordingStatus}
-                </p>
-                {recordedBlob && !isRecording && (
-                  <Button label="Submit Answer" onClick={submitAnswer} />
-                )}
-              </div>
-            )}
-          </div>
-        )}
+          {!isSpeaking && (
+            <div className="flex flex-col items-center gap-6 py-4">
+              <RecordButton
+                isRecording={isRecording}
+                disabled={isSpeaking}
+                onClick={toggleRecording}
+              />
+              <p
+                role="status"
+                aria-live="polite"
+                className="text-sm text-[#8b8ba8] text-center"
+              >
+                {recordingStatus}
+              </p>
+              {recordedBlob && !isRecording && (
+                <Button label="Submit Answer" onClick={submitAnswer} />
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* End interview button */}
-      {phase === 'active' && !isSpeaking && (
+      {!isSpeaking && (
         <div className="text-center">
           <button
             onClick={endInterview}
