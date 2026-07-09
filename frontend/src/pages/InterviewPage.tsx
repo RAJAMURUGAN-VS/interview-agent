@@ -42,6 +42,8 @@ export default function InterviewPage() {
       <InterviewPanel
         phase={interview.phase}
         currentSubject={interview.currentSubject}
+        selectionStep={interview.selectionStep}
+        selectedDeptKey={interview.selectedDeptKey}
         questionNumber={interview.questionNumber}
         recordingStatus={interview.recordingStatus}
         isSpeaking={interview.isSpeaking}
@@ -50,6 +52,8 @@ export default function InterviewPage() {
         feedbackData={interview.feedbackData}
         isFeedbackLoading={interview.isFeedbackLoading}
         selectSubject={interview.selectSubject}
+        handleSelectDepartment={interview.handleSelectDepartment}
+        handleBackToDepts={interview.handleBackToDepts}
         startInterview={interview.startInterview}
         toggleRecording={interview.toggleRecording}
         submitAnswer={interview.submitAnswer}
