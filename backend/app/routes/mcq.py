@@ -140,6 +140,13 @@ def generate():
         return jsonify(response)
 
     except Exception as e:
+        error_str = str(e)
+        # Check for quota exceeded error
+        if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str or "quota" in error_str.lower():
+            return jsonify({
+                "success": False,
+                "error": "API quota exceeded. Please try again tomorrow or upgrade to a paid plan at https://ai.google.dev"
+            }), 429
         return jsonify({"success": False,
                         "error": f"Failed to generate questions: {str(e)}"}), 500
 

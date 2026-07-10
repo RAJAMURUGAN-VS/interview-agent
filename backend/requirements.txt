@@ -4,6 +4,7 @@ python-dotenv
 langchain
 langgraph
 langchain-google-genai
+langchain-perplexity
 assemblyai
 requests
 langchain-community

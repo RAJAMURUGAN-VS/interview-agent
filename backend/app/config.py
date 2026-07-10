@@ -7,3 +7,4 @@ class Config:
     MURF_API_KEY = os.getenv("MURF_API_KEY")
     ASSEMBLYAI_API_KEY = os.getenv("ASSEMBLYAI_API_KEY")
     FIRECRAWL_API_KEY = os.getenv("FIRECRAWL_API_KEY")
+    PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY")

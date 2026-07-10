@@ -17,8 +17,8 @@ class SessionState:
 session = SessionState(0, "", "", "interview_session")
 
 model = init_chat_model(
-    "google_genai:gemini-3.5-flash",
-    api_key=Config.GOOGLE_API_KEY
+    "perplexity:sonar-pro",
+    api_key=Config.PERPLEXITY_API_KEY
 )
 
 agent = None

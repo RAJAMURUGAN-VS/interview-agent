@@ -41,6 +41,13 @@ def generate():
         questions = generate_questions(language, category, topics, question_count)
         return jsonify({"success": True, "questions": questions})
     except Exception as e:
+        error_str = str(e)
+        # Check for quota exceeded error
+        if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str or "quota" in error_str.lower():
+            return jsonify({
+                "success": False,
+                "error": "API quota exceeded. Please try again tomorrow or upgrade to a paid plan at https://ai.google.dev"
+            }), 429
         return jsonify({"success": False,
                         "error": f"Failed to generate questions: {str(e)}"}), 500
 
@@ -81,5 +88,12 @@ def feedback():
         result = generate_feedback(language, category, topics, questions, answer_records)
         return jsonify({"success": True, "feedback": result})
     except Exception as e:
+        error_str = str(e)
+        # Check for quota exceeded error
+        if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str or "quota" in error_str.lower():
+            return jsonify({
+                "success": False,
+                "error": "API quota exceeded. Please try again tomorrow or upgrade to a paid plan at https://ai.google.dev"
+            }), 429
         return jsonify({"success": False,
                         "error": f"Failed to generate feedback: {str(e)}"}), 500

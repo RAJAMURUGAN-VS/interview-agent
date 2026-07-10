@@ -8,8 +8,8 @@ from ..utils.codefill_prompts import (
 )
 
 _model = init_chat_model(
-    "google_genai:gemini-3.5-flash",
-    api_key=Config.GOOGLE_API_KEY,
+    "perplexity:sonar-pro",
+    api_key=Config.PERPLEXITY_API_KEY,
 )
 
 # Competitive Programming topic preset

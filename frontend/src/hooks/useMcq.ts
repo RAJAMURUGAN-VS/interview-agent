@@ -46,6 +46,7 @@ export function useMcq() {
   const [timeRemaining, setTimeRemaining]   = useState<number>(0);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timerStartedRef = useRef(false);
 
   // ── Feedback state ───────────────────────────────────────────────────────
   const [feedback, setFeedback]                   = useState<McqFeedback | null>(null);
@@ -79,6 +80,7 @@ export function useMcq() {
       timerRef.current = null;
     }
     setIsTimerRunning(false);
+    timerStartedRef.current = false;
   }, []);
 
   const startPerQuestionTimer = useCallback(() => {
@@ -86,6 +88,7 @@ export function useMcq() {
     stopTimer();
     setTimeRemaining(timerConfig.perQuestionSecs);
     setIsTimerRunning(true);
+    timerStartedRef.current = true;
   }, [timerConfig, stopTimer]);
 
   const startFullQuizTimer = useCallback(() => {
@@ -93,6 +96,7 @@ export function useMcq() {
     stopTimer();
     setTimeRemaining(timerConfig.fullQuizMins * 60);
     setIsTimerRunning(true);
+    timerStartedRef.current = true;
   }, [timerConfig, stopTimer]);
 
   // ── Timer tick effect ──────────────────────────────────────────────────────
@@ -179,9 +183,10 @@ export function useMcq() {
 
   // ── Monitor timeRemaining for expiry ───────────────────────────────────────
   useEffect(() => {
-    if (timeRemaining === 0 && isTimerRunning === false && phase === 'quiz') {
+    if (timeRemaining === 0 && isTimerRunning === false && phase === 'quiz' && timerStartedRef.current) {
       // Timer just expired
       handleTimerExpire();
+      timerStartedRef.current = false;
     }
   }, [timeRemaining, isTimerRunning, phase, handleTimerExpire]);
 
@@ -190,6 +195,7 @@ export function useMcq() {
     setIsGenerating(true);
     setGenerateError(null);
     setFailedUrls([]);
+    timerStartedRef.current = false;
 
     const result = await generateQuestions({
       source_type:    config.source_type,

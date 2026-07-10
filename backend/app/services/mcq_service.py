@@ -14,11 +14,10 @@ from ..utils.mcq_prompts import (
     MCQ_FEEDBACK_PROMPT,
 )
 
-# Separate model instance — no coupling with interview agent state
+# Separate model instance — using Perplexity Sonar
 _model = init_chat_model(
-    "google_genai:gemini-3.5-flash",
-    api_key=Config.GOOGLE_API_KEY,
-    model_kwargs={"response_mime_type": "application/json"}
+    "perplexity:sonar-pro",
+    api_key=Config.PERPLEXITY_API_KEY,
 )
 
 
