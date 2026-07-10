@@ -17,7 +17,7 @@ class SessionState:
 session = SessionState(0, "", "", "interview_session")
 
 model = init_chat_model(
-    "google_genai:gemini-2.0-flash",
+    "google_genai:gemini-3.5-flash",
     api_key=Config.GOOGLE_API_KEY
 )
 
