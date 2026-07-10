@@ -1,4 +1,4 @@
-import type { McqSourceType, McqQuestionType, McqQuestionCount } from '../../types';
+import type { McqSourceType, McqQuestionType, McqQuestionCount, McqTimerConfig } from '../../types';
 import TextUpload    from './TextUpload';
 import PdfUpload     from './PdfUpload';
 import UrlInput      from './UrlInput';
@@ -12,6 +12,7 @@ interface Props {
   urlList:       string[];
   questionCount: McqQuestionCount;
   questionType:  McqQuestionType;
+  timerConfig:   McqTimerConfig;
   isGenerating:  boolean;
   generateError: string | null;
   failedUrls:    string[];
@@ -22,14 +23,15 @@ interface Props {
   onUrlListChange:    (urls: string[]) => void;
   onCountChange:      (v: McqQuestionCount) => void;
   onTypeChange:       (v: McqQuestionType) => void;
+  onTimerChange:      (patch: Partial<McqTimerConfig>) => void;
   onGenerate:         () => void;
 }
 
 export default function SetupPanel({
   sourceType, textContent, pdfFile, topic, urlList,
-  questionCount, questionType, isGenerating, generateError, failedUrls,
+  questionCount, questionType, timerConfig, isGenerating, generateError, failedUrls,
   onSourceTypeChange, onTextChange, onPdfSelect, onTopicChange, onUrlListChange,
-  onCountChange, onTypeChange, onGenerate,
+  onCountChange, onTypeChange, onTimerChange, onGenerate,
 }: Props) {
   const canGenerate = sourceType === 'text'
     ? textContent.trim().length >= 100
@@ -125,9 +127,11 @@ export default function SetupPanel({
         topic={topic}
         questionCount={questionCount}
         questionType={questionType}
+        timerConfig={timerConfig}
         onTopicChange={onTopicChange}
         onCountChange={onCountChange}
         onTypeChange={onTypeChange}
+        onTimerChange={onTimerChange}
       />
 
       {/* Error */}
