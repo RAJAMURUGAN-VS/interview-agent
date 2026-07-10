@@ -15,8 +15,8 @@ export async function generateQuestions(params: {
   content?:       string;        // required when source_type === 'text'
   pdfFile?:       File;          // required when source_type === 'pdf'
   topic?:         string;        // required when source_type === 'topic';
-                                 // optional focus for text/pdf/url
-  urls?:          string[];      // required when source_type === 'url'
+                                 // optional focus for text/pdf/url/youtube
+  urls?:          string[];      // required when source_type === 'url' or 'youtube'
   question_count: McqQuestionCount;
   question_type:  McqQuestionType;
 }): Promise<McqGenerateResponse> {
@@ -35,6 +35,9 @@ export async function generateQuestions(params: {
     formData.append('content', params.content ?? '');
   } else if (params.source_type === 'url') {
     // Send URLs as newline-separated string
+    formData.append('urls', (params.urls ?? []).join('\n'));
+  } else if (params.source_type === 'youtube') {
+    // Send YouTube URLs as newline-separated string
     formData.append('urls', (params.urls ?? []).join('\n'));
   } else if (params.source_type === 'topic') {
     // topic already appended above; no content field needed

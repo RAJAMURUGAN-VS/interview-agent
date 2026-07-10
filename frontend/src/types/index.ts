@@ -82,7 +82,7 @@ export interface AskTextResponse {
 
 export type McqQuestionType  = 'mcq' | 'truefalse' | 'fillup';
 export type McqQuestionCount = 5 | 10 | 15 | 20;
-export type McqSourceType    = 'text' | 'pdf' | 'topic' | 'url';
+export type McqSourceType    = 'text' | 'pdf' | 'topic' | 'url' | 'youtube';
 export type McqReviewFilter  = 'all' | 'correct' | 'wrong';
 export type McqPhase         = 'setup' | 'quiz' | 'feedback';
 export type McqGrade         = 'Excellent' | 'Good' | 'Needs Revision' | 'Poor';

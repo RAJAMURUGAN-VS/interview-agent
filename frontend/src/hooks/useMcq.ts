@@ -196,7 +196,9 @@ export function useMcq() {
       content:        config.source_type === 'text' ? textContent : undefined,
       pdfFile:        config.source_type === 'pdf'  ? pdfFile ?? undefined : undefined,
       topic:          config.topic,
-      urls:           config.source_type === 'url'  ? urlList : undefined,
+      urls:           (config.source_type === 'url' || config.source_type === 'youtube')
+                        ? urlList
+                        : undefined,
       question_count: config.question_count,
       question_type:  config.question_type,
     });

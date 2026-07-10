@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify
 from ..services.mcq_service import (
     extract_text_from_pdf,
     extract_content_from_urls,
+    extract_content_from_youtube,
     generate_questions,
     generate_feedback,
 )
@@ -12,20 +13,21 @@ bp = Blueprint("mcq", __name__)
 @bp.route("/mcq/generate", methods=["POST"])
 def generate():
     """
-    Generate MCQ/True-False/Fill-up questions from one of four source types:
-      - "text":  pasted plain text notes (existing)
-      - "pdf":   uploaded PDF file (existing)
-      - "topic": topic name only — AI generates from own knowledge (new)
-      - "url":   one or more website URLs extracted via Tavily (new)
+    Generate MCQ/True-False/Fill-up questions from one of five source types:
+      - "text":    pasted plain text notes (existing)
+      - "pdf":     uploaded PDF file (existing)
+      - "topic":   topic name only — AI generates from own knowledge (existing)
+      - "url":     one or more website URLs extracted via Firecrawl (upgraded)
+      - "youtube": one or more YouTube video transcripts (new)
 
     Accepts multipart/form-data with fields:
-      source_type    : "text" | "pdf" | "topic" | "url"
+      source_type    : "text" | "pdf" | "topic" | "url" | "youtube"
       content        : plain text (source_type == "text")
       pdf            : PDF file   (source_type == "pdf")
       topic          : topic name (source_type == "topic"; also optional focus
-                       for text/pdf/url)
-      urls           : newline-separated or comma-separated URL list
-                       (source_type == "url")
+                       for text/pdf/url/youtube)
+      urls           : newline-separated or comma-separated URL/YouTube link list
+                       (source_type == "url" or "youtube")
       question_count : 5 | 10 | 15 | 20
       question_type  : "mcq" | "truefalse" | "fillup"
 
@@ -33,7 +35,7 @@ def generate():
       {
         "success": true,
         "questions": [...],
-        "failed_urls": ["https://..."]   ← only present when source_type=url
+        "failed_urls": ["https://..."]   ← only present when source_type=url or youtube
       }
     """
     source_type    = request.form.get("source_type", "text")
@@ -96,6 +98,30 @@ def generate():
                 "success": False,
                 "error": "Could not extract enough content from the provided URLs. "
                          "Please check the URLs and try again.",
+                "failed_urls": failed_urls,
+            }), 400
+
+    elif source_type == "youtube":
+        raw_urls = request.form.get("urls", "")
+        # Accept newline-separated or comma-separated YouTube URLs
+        url_list = [
+            u.strip()
+            for u in raw_urls.replace(",", "\n").splitlines()
+            if u.strip()
+        ]
+        if not url_list:
+            return jsonify({"success": False,
+                            "error": "Please provide at least one YouTube URL."}), 400
+
+        content, failed_urls = extract_content_from_youtube(url_list)
+
+        if not content or len(content) < 100:
+            return jsonify({
+                "success": False,
+                "error": (
+                    "Could not extract transcripts from the provided YouTube URLs. "
+                    "Make sure the videos have captions/transcripts enabled."
+                ),
                 "failed_urls": failed_urls,
             }), 400
 

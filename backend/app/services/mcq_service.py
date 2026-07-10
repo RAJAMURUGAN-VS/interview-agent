@@ -1,9 +1,9 @@
 import json
 import tempfile
 import os
+import re
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.chat_models import init_chat_model
-from tavily import TavilyClient
 from ..config import Config
 from ..utils.mcq_prompts import (
     MCQ_GENERATION_PROMPT,
@@ -38,17 +38,37 @@ def extract_text_from_pdf(file_bytes: bytes) -> str:
         os.unlink(tmp_path)
 
 
+def extract_video_id(url: str) -> str | None:
+    """
+    Extract YouTube video ID from any standard YouTube URL format.
+    Supports: https://www.youtube.com/watch?v=VIDEO_ID,
+              https://youtu.be/VIDEO_ID,
+              https://www.youtube.com/embed/VIDEO_ID
+    Returns None if URL is not a recognisable YouTube URL.
+    """
+    patterns = [
+        r"(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/)([A-Za-z0-9_-]{11})"
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            return match.group(1)
+    return None
+
+
 def extract_content_from_urls(urls: list[str]) -> tuple[str, list[str]]:
     """
-    Extract text content from a list of URLs using Tavily Search API.
+    Extract clean markdown content from a list of URLs using Firecrawl.
     Returns (merged_content_string, list_of_failed_urls).
 
-    Uses TavilyClient.extract() which is designed specifically for
-    content extraction from URLs (not search). Each URL is extracted
-    individually. Failed URLs are collected and returned for user warning.
-    Content from all successful URLs is merged with a separator.
+    FirecrawlApp.scrape_url() calls Firecrawl's /scrape endpoint which
+    returns clean markdown — better signal for MCQ generation than
+    search snippets. Each URL is scraped individually so partial failure
+    is handled gracefully.
     """
-    client = TavilyClient(api_key=Config.TAVILY_API_KEY)
+    from firecrawl import FirecrawlApp
+    
+    client = FirecrawlApp(api_key=Config.FIRECRAWL_API_KEY)
     extracted_parts = []
     failed_urls = []
 
@@ -57,16 +77,66 @@ def extract_content_from_urls(urls: list[str]) -> tuple[str, list[str]]:
         if not url:
             continue
         try:
-            result = client.extract(urls=[url])
-            # Tavily extract returns { "results": [{ "url", "raw_content" }] }
-            results = result.get("results", [])
-            if results and results[0].get("raw_content"):
+            result = client.scrape_url(url, formats=["markdown"])
+            markdown = getattr(result, "markdown", None) or ""
+            if markdown.strip():
                 extracted_parts.append(
                     f"--- Content from {url} ---\n"
-                    f"{results[0]['raw_content'][:8000]}"
+                    f"{markdown.strip()[:8000]}"
                 )
             else:
                 failed_urls.append(url)
+        except Exception:
+            failed_urls.append(url)
+
+    merged = "\n\n".join(extracted_parts)
+    return merged, failed_urls
+
+
+def extract_content_from_youtube(urls: list[str]) -> tuple[str, list[str]]:
+    """
+    Extract transcript text from one or more YouTube video URLs.
+    Returns (merged_transcript_string, list_of_failed_urls).
+
+    Each video's transcript is prepended with a header showing the URL.
+    Transcripts are joined with double newlines before being passed to
+    the MCQ generation pipeline exactly like URL-extracted content.
+    Truncated to 8000 chars per video to avoid token overflow.
+    """
+    from youtube_transcript_api import YouTubeTranscriptApi
+    from youtube_transcript_api._errors import (
+        TranscriptsDisabled, NoTranscriptFound
+    )
+
+    extracted_parts = []
+    failed_urls = []
+
+    for url in urls:
+        url = url.strip()
+        if not url:
+            continue
+
+        video_id = extract_video_id(url)
+        if not video_id:
+            failed_urls.append(url)
+            continue
+
+        try:
+            transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
+            full_text = " ".join(
+                item["text"] for item in transcript_list
+            ).strip()
+
+            if full_text:
+                extracted_parts.append(
+                    f"--- Transcript from {url} ---\n"
+                    f"{full_text[:8000]}"
+                )
+            else:
+                failed_urls.append(url)
+
+        except (TranscriptsDisabled, NoTranscriptFound):
+            failed_urls.append(url)
         except Exception:
             failed_urls.append(url)
 

@@ -12,4 +12,5 @@ langchain-chroma
 chromadb
 pypdf
 sentence-transformers
-tavily-python
+firecrawl-py
+youtube-transcript-api

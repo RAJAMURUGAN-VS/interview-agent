@@ -39,6 +39,8 @@ export default function SetupPanel({
     ? topic.trim().length > 0
     : sourceType === 'url'
     ? urlList.length > 0
+    : sourceType === 'youtube'
+    ? urlList.length > 0
     : false;
 
   return (
@@ -56,6 +58,7 @@ export default function SetupPanel({
             { value: 'pdf',   label: 'Upload PDF', icon: 'fas fa-file-pdf' },
             { value: 'topic', label: 'By Topic',   icon: 'fas fa-lightbulb' },
             { value: 'url',   label: 'From URL',   icon: 'fas fa-globe' },
+            { value: 'youtube', label: 'YouTube',  icon: 'fab fa-youtube' },
           ] as { value: McqSourceType; label: string; icon: string }[]).map((opt) => (
             <button
               key={opt.value}
@@ -66,7 +69,7 @@ export default function SetupPanel({
                   ? 'bg-[#4f46e5] text-white shadow-[0_0_12px_rgba(79,70,229,0.3)]'
                   : 'text-[#8b8ba8] hover:text-[#f0f0ff]'}`}
             >
-              <i className={`${opt.icon} text-xs`} />
+              <i className={`${opt.icon} text-xs ${opt.value === 'youtube' && sourceType === opt.value ? 'text-[#ef4444]' : ''}`} />
               {opt.label}
             </button>
           ))}
@@ -102,6 +105,17 @@ export default function SetupPanel({
               urls={urlList}
               onChange={onUrlListChange}
               disabled={isGenerating}
+            />
+          : sourceType === 'youtube'
+          ? <UrlInput
+              urls={urlList}
+              onChange={onUrlListChange}
+              disabled={isGenerating}
+              placeholder={
+                `https://www.youtube.com/watch?v=VIDEO_ID\n` +
+                `https://youtu.be/SHORT_ID\n` +
+                `(paste one or more YouTube video URLs, one per line)`
+              }
             />
           : null}
       </div>
