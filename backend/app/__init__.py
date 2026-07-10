@@ -8,7 +8,7 @@ def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
 
-    required = ['GOOGLE_API_KEY', 'MURF_API_KEY', 'ASSEMBLYAI_API_KEY']
+    required = ['PERPLEXITY_API_KEY', 'MURF_API_KEY', 'ASSEMBLYAI_API_KEY']
     missing = [k for k in required if not app.config.get(k)]
     if missing:
         print(f"ERROR: Missing required env vars: {', '.join(missing)}")
