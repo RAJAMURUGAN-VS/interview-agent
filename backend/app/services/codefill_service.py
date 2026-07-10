@@ -8,7 +8,7 @@ from ..utils.codefill_prompts import (
 )
 
 _model = init_chat_model(
-    "google_genai:gemini-2.5-flash",
+    "google_genai:gemini-2.0-flash",
     api_key=Config.GOOGLE_API_KEY,
 )
 
