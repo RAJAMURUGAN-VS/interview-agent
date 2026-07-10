@@ -65,6 +65,7 @@ export default function McqPage() {
                     { value: 'pdf',   label: 'Upload PDF', icon: 'fas fa-file-pdf' },
                     { value: 'topic', label: 'By Topic',   icon: 'fas fa-lightbulb' },
                     { value: 'url',   label: 'From URL',   icon: 'fas fa-globe' },
+                    { value: 'youtube', label: 'YouTube',  icon: 'fab fa-youtube' },
                   ] as { value: McqSourceType; label: string; icon: string }[]).map((opt) => (
                     <button
                       key={opt.value}
@@ -111,6 +112,17 @@ export default function McqPage() {
                       urls={mcq.urlList}
                       onChange={mcq.setUrlList}
                       disabled={mcq.isGenerating}
+                    />
+                  : mcq.config.source_type === 'youtube'
+                  ? <UrlInput
+                      urls={mcq.urlList}
+                      onChange={mcq.setUrlList}
+                      disabled={mcq.isGenerating}
+                      placeholder={
+                        `https://www.youtube.com/watch?v=VIDEO_ID\n` +
+                        `https://youtu.be/SHORT_ID\n` +
+                        `(paste one or more YouTube video URLs, one per line)`
+                      }
                     />
                   : null}
               </div>
@@ -159,6 +171,8 @@ export default function McqPage() {
                     : mcq.config.source_type === 'topic'
                     ? mcq.config.topic.trim().length === 0
                     : mcq.config.source_type === 'url'
+                    ? mcq.urlList.length === 0
+                    : mcq.config.source_type === 'youtube'
                     ? mcq.urlList.length === 0
                     : true)
                 }
