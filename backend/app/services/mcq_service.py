@@ -223,7 +223,12 @@ def generate_questions(
     )
     messages = [{"role": "user", "content": prompt}]
     response = _model.invoke(messages)
-    raw = response.content.strip()
+    
+    # Handle both string and list response content
+    if isinstance(response.content, list):
+        raw = "".join(str(item) for item in response.content)
+    else:
+        raw = response.content.strip()
 
     # Strip code fences defensively
     if raw.startswith("```"):
@@ -280,7 +285,12 @@ def generate_feedback(
 
     messages = [{"role": "user", "content": prompt}]
     response = _model.invoke(messages)
-    raw = response.content.strip()
+    
+    # Handle both string and list response content
+    if isinstance(response.content, list):
+        raw = "".join(str(item) for item in response.content)
+    else:
+        raw = response.content.strip()
 
     if raw.startswith("```"):
         raw = raw.split("```")[1]
