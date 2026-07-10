@@ -18,6 +18,7 @@ from ..utils.mcq_prompts import (
 _model = init_chat_model(
     "google_genai:gemini-3.5-flash",
     api_key=Config.GOOGLE_API_KEY,
+    model_kwargs={"response_mime_type": "application/json"}
 )
 
 
@@ -58,17 +59,11 @@ def extract_video_id(url: str) -> str | None:
 
 def extract_content_from_urls(urls: list[str]) -> tuple[str, list[str]]:
     """
-    Extract clean markdown content from a list of URLs using Firecrawl.
+    Extract text content from URLs using fast HTTP requests with short timeout.
     Returns (merged_content_string, list_of_failed_urls).
-
-    FirecrawlApp.scrape_url() calls Firecrawl's /scrape endpoint which
-    returns clean markdown — better signal for MCQ generation than
-    search snippets. Each URL is scraped individually so partial failure
-    is handled gracefully.
-    """
-    from firecrawl import FirecrawlApp
     
-    client = FirecrawlApp(api_key=Config.FIRECRAWL_API_KEY)
+    Uses direct HTTP requests for speed. Firecrawl is too slow for interactive use.
+    """
     extracted_parts = []
     failed_urls = []
 
@@ -76,17 +71,57 @@ def extract_content_from_urls(urls: list[str]) -> tuple[str, list[str]]:
         url = url.strip()
         if not url:
             continue
+
         try:
-            result = client.scrape_url(url, formats=["markdown"])
-            markdown = getattr(result, "markdown", None) or ""
-            if markdown.strip():
+            import requests
+            from html.parser import HTMLParser
+            
+            # Fast HTTP request with 8-second timeout
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            }
+            resp = requests.get(url, headers=headers, timeout=8)
+            resp.raise_for_status()
+
+            # Simple text extraction from HTML
+            class SimpleTextExtractor(HTMLParser):
+                def __init__(self):
+                    super().__init__()
+                    self.text = []
+                    self.skip_tags = {"script", "style", "meta", "link", "noscript"}
+                    self.skip_depth = 0
+
+                def handle_starttag(self, tag, attrs):
+                    if tag in self.skip_tags:
+                        self.skip_depth += 1
+
+                def handle_endtag(self, tag):
+                    if tag in self.skip_tags and self.skip_depth > 0:
+                        self.skip_depth -= 1
+
+                def handle_data(self, data):
+                    if self.skip_depth == 0:
+                        text = data.strip()
+                        if text:
+                            self.text.append(text)
+
+            parser = SimpleTextExtractor()
+            parser.feed(resp.text)
+            content = "\n".join(parser.text)
+
+            if content and len(content.strip()) > 100:
                 extracted_parts.append(
                     f"--- Content from {url} ---\n"
-                    f"{markdown.strip()[:8000]}"
+                    f"{content.strip()[:8000]}"
                 )
             else:
                 failed_urls.append(url)
-        except Exception:
+
+        except requests.exceptions.Timeout:
+            print(f"Timeout downloading {url} (>8s)")
+            failed_urls.append(url)
+        except Exception as e:
+            print(f"Failed to extract content from {url}: {e}")
             failed_urls.append(url)
 
     merged = "\n\n".join(extracted_parts)
@@ -207,6 +242,26 @@ def _build_generation_prompt(
     )
 
 
+def _get_response_text(response) -> str:
+    content = response.content
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, dict):
+                parts.append(item.get("text", item.get("content", "")))
+            elif hasattr(item, "text"):
+                parts.append(getattr(item, "text") or "")
+            elif hasattr(item, "content"):
+                parts.append(getattr(item, "content") or "")
+            else:
+                parts.append(str(item))
+        return "".join(parts).strip()
+    elif isinstance(content, str):
+        return content.strip()
+    else:
+        return str(content).strip()
+
+
 def generate_questions(
     content: str,
     question_count: int,
@@ -222,13 +277,24 @@ def generate_questions(
         content, question_count, topic, question_type, source_type
     )
     messages = [{"role": "user", "content": prompt}]
-    response = _model.invoke(messages)
     
-    # Handle both string and list response content
-    if isinstance(response.content, list):
-        raw = "".join(str(item) for item in response.content)
-    else:
-        raw = response.content.strip()
+    import time
+    response = None
+    for attempt in range(3):
+        try:
+            response = _model.invoke(messages)
+            break
+        except Exception as e:
+            if any(k in str(e) for k in ["503", "UNAVAILABLE", "rate limit", "quota", "resource_exhausted", "429"]):
+                print(f"GenAI 503/429 load warning, retrying in {2 * (attempt + 1)}s... Error: {e}")
+                time.sleep(2 * (attempt + 1))
+                continue
+            else:
+                raise e
+    if not response:
+        raise ValueError("The AI model is currently busy under high demand. Please try again in a few seconds.")
+
+    raw = _get_response_text(response)
 
     # Strip code fences defensively
     if raw.startswith("```"):
@@ -239,10 +305,31 @@ def generate_questions(
     if raw.endswith("```"):
         raw = raw[:-3].strip()
 
-    questions = json.loads(raw)
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        # Fallback repair: replace single quotes with double quotes
+        try:
+            # simple replacement for single quotes (e.g. {'id': 'q1'} -> {"id": "q1"})
+            # Note: This is a fallback and shouldn't run often because of JSON mode.
+            repaired = raw.replace("'", '"')
+            parsed = json.loads(repaired)
+        except Exception:
+            raise ValueError(f"LLM returned invalid JSON: {raw[:200]}")
 
-    if not isinstance(questions, list):
-        raise ValueError("LLM did not return a JSON array")
+    if isinstance(parsed, dict):
+        # Look for any list inside the dict (e.g. "questions", "quiz", etc.)
+        questions = None
+        for val in parsed.values():
+            if isinstance(val, list):
+                questions = val
+                break
+        if questions is None:
+            raise ValueError("LLM did not return a JSON array or a dictionary containing an array")
+    elif isinstance(parsed, list):
+        questions = parsed
+    else:
+        raise ValueError("LLM did not return a JSON array or object")
 
     # Assign stable ids if LLM omitted them
     for i, q in enumerate(questions):
@@ -284,13 +371,24 @@ def generate_feedback(
     )
 
     messages = [{"role": "user", "content": prompt}]
-    response = _model.invoke(messages)
     
-    # Handle both string and list response content
-    if isinstance(response.content, list):
-        raw = "".join(str(item) for item in response.content)
-    else:
-        raw = response.content.strip()
+    import time
+    response = None
+    for attempt in range(3):
+        try:
+            response = _model.invoke(messages)
+            break
+        except Exception as e:
+            if any(k in str(e) for k in ["503", "UNAVAILABLE", "rate limit", "quota", "resource_exhausted", "429"]):
+                print(f"GenAI 503/429 load warning, retrying in {2 * (attempt + 1)}s... Error: {e}")
+                time.sleep(2 * (attempt + 1))
+                continue
+            else:
+                raise e
+    if not response:
+        raise ValueError("The AI model is currently busy under high demand. Please try again in a few seconds.")
+
+    raw = _get_response_text(response)
 
     if raw.startswith("```"):
         raw = raw.split("```")[1]
