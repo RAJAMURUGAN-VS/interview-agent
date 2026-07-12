@@ -1,5 +1,6 @@
 flask
 flask-cors
+flask-sqlalchemy
 python-dotenv
 langchain
 langgraph

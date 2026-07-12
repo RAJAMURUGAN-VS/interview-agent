@@ -6,6 +6,7 @@ import NotesSubjectPage from './pages/NotesSubjectPage';
 import PdfChatPage from './pages/PdfChatPage';
 import McqPage from './components/mcq/McqPage';
 import CodeFillPage from './components/codefill/CodeFillPage';
+import InsightsPage from './components/insights/InsightsPage';
 
 export default function App() {
   return (
@@ -36,6 +37,9 @@ export default function App() {
 
             {/* Code Fill route */}
             <Route path="/codefill" element={<CodeFillPage />} />
+
+            {/* Insights route */}
+            <Route path="/insights" element={<InsightsPage />} />
 
             {/* Fallback */}
             <Route path="*" element={<Navigate to="/interview" replace />} />

@@ -224,3 +224,119 @@ export interface CfFeedbackResponse {
   feedback?: CfFeedback;
   error?: string;
 }
+
+// ── Insights ──────────────────────────────────────────
+
+export type InsightsDepartment = 'CSE' | 'ECE' | 'AIML' | 'IT' | 'CSBS' | 'Other';
+export type InsightsOfferType  = 'On-Campus' | 'Off-Campus' | 'Internship' | 'Full-Time';
+export type InsightsDifficulty = 1 | 2 | 3 | 4 | 5;
+export type InsightsOutcome    = 'Selected' | 'Rejected' | 'Waiting';
+export type InsightsSubTab     = 'experience' | 'preparation';
+export type InsightsView       = 'browse' | 'company-detail';
+export type InsightsModalStep  = 'type-pick' | 'form' | 'success';
+export type InsightsPostType   = 'experience' | 'preparation';
+
+export interface InsightsRound {
+  roundName:   string;
+  description: string;
+}
+
+export interface BasePost {
+  id:          string;
+  company:     string;
+  role:        string;
+  department:  InsightsDepartment;
+  postedAt:    string;
+  upvotes:     number;
+  authorAlias: string;
+}
+
+export interface InterviewExperiencePost extends BasePost {
+  offerType:  InsightsOfferType;
+  difficulty: InsightsDifficulty;
+  outcome:    InsightsOutcome;
+  rounds:     InsightsRound[];
+  tips:       string;
+}
+
+export interface PreparationStrategyPost extends BasePost {
+  prepDurationWeeks: number;
+  codingPlatforms:   string[];
+  studyMaterials:    string[];
+  youtubeChannels:   string[];
+  dailyRoutine:      string;
+  advice:            string;
+}
+
+export interface CompanySummary {
+  company:       string;
+  expCount:      number;
+  prepCount:     number;
+  totalPosts:    number;
+  avgDifficulty: number | null;
+  selectionRate: number | null;
+  lastActivity:  string | null;
+}
+
+export interface CompanyDetail {
+  company:       string;
+  totalPosts:    number;
+  avgDifficulty: number | null;
+  selectionRate: number | null;
+  experiences:   InterviewExperiencePost[];
+  preparations:  PreparationStrategyPost[];
+}
+
+// Form drafts — what the user is filling in before submission
+export interface ExperienceDraft {
+  company:    string;
+  role:       string;
+  department: InsightsDepartment | '';
+  offerType:  InsightsOfferType  | '';
+  difficulty: InsightsDifficulty | null;
+  outcome:    InsightsOutcome    | '';
+  rounds:     InsightsRound[];
+  tips:       string;
+}
+
+export interface PreparationDraft {
+  company:           string;
+  role:              string;
+  department:        InsightsDepartment | '';
+  prepDurationWeeks: string;             // string for input binding, parsed on submit
+  codingPlatforms:   string[];
+  studyMaterials:    string[];
+  youtubeChannels:   string[];
+  dailyRoutine:      string;
+  advice:            string;
+}
+
+// API response shapes
+export interface InsightsCompaniesResponse {
+  companies?: CompanySummary[];
+  error?:     string;
+}
+
+export interface InsightsCompanyDetailResponse extends CompanyDetail {
+  error?: string;
+}
+
+export interface InsightsSubmitResponse {
+  success: boolean;
+  post?:   InterviewExperiencePost | PreparationStrategyPost;
+  error?:  string;
+}
+
+export interface InsightsUpvoteResponse {
+  success: boolean;
+  upvotes?: number;
+  error?:  string;
+}
+
+export interface InsightsSearchResponse {
+  success:          boolean;
+  matchedCompanies: string[];
+  experiences:      InterviewExperiencePost[];
+  preparations:     PreparationStrategyPost[];
+  error?:           string;
+}

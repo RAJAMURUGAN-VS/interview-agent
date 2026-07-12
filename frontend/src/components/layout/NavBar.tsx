@@ -7,6 +7,7 @@ const TABS = [
   { to: '/pdf-chat',  icon: 'fas fa-file-pdf',        label: 'PDF Chat'  },
   { to: '/mcq',       icon: 'fas fa-circle-question', label: 'MCQ'       },
   { to: '/codefill',  icon: 'fas fa-code',            label: 'Code Fill' },
+  { to: '/insights',  icon: 'fas fa-lightbulb',       label: 'Insights'  },
 ];
 
 export default function NavBar() {
