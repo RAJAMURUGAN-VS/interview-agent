@@ -1,48 +1,85 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type { PdfTab, PdfChatMessage, ChatMode, PdfChatHistoryEntry } from '../types';
-import { uploadPdf, askText, transcribeAudio, streamTtsAudio, deleteSession } from '../api/pdfChatApi';
-import { useAudioStream } from './useAudioStream';
+import {
+  uploadPdf, askText, transcribeAudio, streamTtsAudio,
+  deleteSession, createSessionFromHash,
+} from '../api/pdfChatApi';
+import { useAudioStream }   from './useAudioStream';
 import { useMediaRecorder } from './useMediaRecorder';
-import { savePdfChatEntry } from './useHistory';
+import {
+  savePdfChatEntry,
+  updatePdfChatEntry,
+} from './useHistory';
+import {
+  usePdfCacheCheck,
+  type ChunkData,
+} from './usePdfChatIndexedDB';
+
+//
+// ── Mental model (ChatGPT / Claude style) ─────────────────────────────────
+//
+//  • History entry is created ONCE: right when a PDF is uploaded.
+//  • History entry is updated IN-PLACE (debounced) as messages arrive.
+//  • Closing a tab does NOTHING to history — it's already up-to-date.
+//  • Opening from history opens the PDF as a tab (or switches to it).
+//
+// ──────────────────────────────────────────────────────────────────────────
+
+const SYNC_DEBOUNCE_MS = 400;
 
 export function usePdfChat() {
-  // ── Tab state ────────────────────────────────────────────────────────────
   const [tabs, setTabs]                     = useState<PdfTab[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
 
-  // ── Upload panel state ───────────────────────────────────────────────────
   const [showUploadPanel, setShowUploadPanel] = useState(false);
   const [isUploading, setIsUploading]         = useState(false);
   const [uploadError, setUploadError]         = useState<string | null>(null);
 
-  // ── Chat input state ─────────────────────────────────────────────────────
   const [mode, setMode]           = useState<ChatMode>('text');
   const [textInput, setTextInput] = useState('');
   const [isAsking, setIsAsking]   = useState(false);
 
   const { isSpeaking, isPaused, playStream, pauseAudio, resumeAudio, stopAudio } = useAudioStream();
-  const { isRecording, recordedBlob, startRecording, stopRecording } =
-    useMediaRecorder();
+  const { isRecording, recordedBlob, startRecording, stopRecording } = useMediaRecorder();
+  const { checkCache, storeCache } = usePdfCacheCheck();
 
-  // ── Derived: active tab object ───────────────────────────────────────────
   const activeTab = tabs.find((t) => t.threadId === activeThreadId) ?? null;
 
-  // ── Helper: append a message to a specific tab ───────────────────────────
+  // ── Debounced history sync ──────────────────────────────────────────────
+  // Whenever a tab's messages change, push the update to localStorage so
+  // history is always fresh. Closing the tab does NOT touch history at all.
+  const syncTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  const syncTabToHistory = useCallback((tab: PdfTab) => {
+    if (!tab.historyEntryId) return;
+    if (syncTimers.current[tab.threadId]) clearTimeout(syncTimers.current[tab.threadId]);
+    syncTimers.current[tab.threadId] = setTimeout(() => {
+      updatePdfChatEntry(tab.historyEntryId!, {
+        messages:     tab.messages,
+        messageCount: tab.messages.length,
+        savedAt:      new Date().toISOString(),
+      });
+    }, SYNC_DEBOUNCE_MS);
+  }, []);
+
+  // Watch for message changes on any tab → sync to history
+  const prevTabsRef = useRef<PdfTab[]>([]);
+  useEffect(() => {
+    tabs.forEach((tab) => {
+      const prev = prevTabsRef.current.find((t) => t.threadId === tab.threadId);
+      if (!prev || prev.messages.length !== tab.messages.length) {
+        syncTabToHistory(tab);
+      }
+    });
+    prevTabsRef.current = tabs;
+  }, [tabs, syncTabToHistory]);
+
+  // ── Append a message to a tab ───────────────────────────────────────────
   const appendMessage = useCallback(
     (threadId: string, role: 'user' | 'assistant', text: string, sources?: number[], isStreaming?: boolean) => {
-      const newMessage: PdfChatMessage = {
-        id: crypto.randomUUID(),
-        role,
-        text,
-        sources,
-        isStreaming,
-      };
+      const newMsg: PdfChatMessage = { id: crypto.randomUUID(), role, text, sources, isStreaming };
       setTabs((prev) =>
-        prev.map((tab) =>
-          tab.threadId === threadId
-            ? { ...tab, messages: [...tab.messages, newMessage] }
-            : tab,
-        ),
+        prev.map((t) => t.threadId === threadId ? { ...t, messages: [...t.messages, newMsg] } : t),
       );
     },
     [],
@@ -50,25 +87,47 @@ export function usePdfChat() {
 
   const markMessageStreamingComplete = useCallback((threadId: string, messageId: string) => {
     setTabs((prev) =>
-      prev.map((tab) =>
-        tab.threadId === threadId
-          ? {
-              ...tab,
-              messages: tab.messages.map((msg) =>
-                msg.id === messageId ? { ...msg, isStreaming: false } : msg
-              ),
-            }
-          : tab
-      )
+      prev.map((t) =>
+        t.threadId !== threadId ? t : {
+          ...t,
+          messages: t.messages.map((m) => m.id === messageId ? { ...m, isStreaming: false } : m),
+        },
+      ),
     );
   }, []);
 
-  // ── Upload a new PDF → create new tab ────────────────────────────────────
+  // ── Upload PDF ──────────────────────────────────────────────────────────
+  // History entry is created HERE — once. Subsequent messages update it.
   const handleUpload = useCallback(async (file: File) => {
     setIsUploading(true);
     setUploadError(null);
 
-    const result = await uploadPdf(file);
+    let result: Awaited<ReturnType<typeof uploadPdf>>;
+    let resolvedHash = '';
+
+    try {
+      const cacheResult = await checkCache(file);
+      resolvedHash = cacheResult.fileHash;
+
+      if (cacheResult.hit) {
+        const fromHash = await createSessionFromHash(cacheResult.record.fileHash, file.name);
+        if (fromHash.success && fromHash.thread_id) {
+          result = { success: true, thread_id: fromHash.thread_id, file_hash: cacheResult.record.fileHash };
+        } else {
+          result = await uploadPdf(file);
+        }
+      } else {
+        result = await uploadPdf(file);
+      }
+    } catch {
+      try { result = await uploadPdf(file); }
+      catch {
+        setIsUploading(false);
+        setUploadError('Upload failed. Please try again.');
+        return;
+      }
+    }
+
     setIsUploading(false);
 
     if (!result.success || !result.thread_id || !result.file_hash) {
@@ -76,188 +135,210 @@ export function usePdfChat() {
       return;
     }
 
+    // ── Create history entry immediately (0 messages) ──────────────────────
+    const historyEntryId = crypto.randomUUID();
+    savePdfChatEntry({
+      id:           historyEntryId,
+      savedAt:      new Date().toISOString(),
+      fileName:     file.name,
+      fileHash:     result.file_hash,
+      messageCount: 0,
+      messages:     [],
+    });
+
     const newTab: PdfTab = {
-      threadId: result.thread_id,
-      fileHash: result.file_hash,
-      fileName: file.name,
-      messages: [],
+      threadId:       result.thread_id,
+      fileHash:       result.file_hash,
+      fileName:       file.name,
+      messages:       [],
+      startedAt:      new Date().toISOString(),
+      historyEntryId,               // ← links tab to its history entry permanently
     };
 
     setTabs((prev) => [...prev, newTab]);
     setActiveThreadId(result.thread_id);
-    setShowUploadPanel(false); // collapse upload area after success
+    setShowUploadPanel(false);
     setUploadError(null);
-  }, []);
 
-  // ── Switch active tab ─────────────────────────────────────────────────────
+    // Cache hash in IDB for next time
+    if (resolvedHash && result.file_hash) {
+      storeCache(file, resolvedHash, result.thread_id, [] as ChunkData[]).catch(() => {});
+    }
+  }, [checkCache, storeCache]);
+
+  // ── Switch active tab ───────────────────────────────────────────────────
   const handleSelectTab = useCallback((threadId: string) => {
     setActiveThreadId(threadId);
     setShowUploadPanel(false);
     setTextInput('');
   }, []);
 
-  // ── Close a tab — auto-save before closing ────────────────────────────────
-  const handleCloseTab = useCallback(
-    (threadId: string) => {
-      // Auto-save conversation to history
-      const tabToClose = tabs.find((t) => t.threadId === threadId);
-      if (tabToClose && tabToClose.messages.length > 0) {
-        const entry: PdfChatHistoryEntry = {
-          id: crypto.randomUUID(),
-          savedAt: new Date().toISOString(),
-          fileName: tabToClose.fileName,
-          messageCount: tabToClose.messages.length,
-          messages: tabToClose.messages,
-        };
-        savePdfChatEntry(entry);
-      }
+  // ── Close tab ───────────────────────────────────────────────────────────
+  // History is already kept in sync by syncTabToHistory, so we do NOTHING
+  // history-related here. Just remove the tab and clean up.
+  const handleCloseTab = useCallback((threadId: string) => {
+    // Cancel any pending sync for this tab
+    if (syncTimers.current[threadId]) {
+      clearTimeout(syncTimers.current[threadId]);
+      delete syncTimers.current[threadId];
+    }
 
-      // Tell backend to free memory — fire and forget
-      deleteSession(threadId);
-
-      setTabs((prev) => {
-        const remaining = prev.filter((t) => t.threadId !== threadId);
-
-        // Determine next active tab
-        if (activeThreadId === threadId) {
-          const closedIndex = prev.findIndex((t) => t.threadId === threadId);
-          const nextTab =
-            remaining[closedIndex] ??     // tab to the right
-            remaining[closedIndex - 1] ?? // tab to the left
-            null;
-          setActiveThreadId(nextTab?.threadId ?? null);
-        }
-
-        return remaining;
+    setTabs((prev) => {
+      const remaining = prev.filter((t) => t.threadId !== threadId);
+      setActiveThreadId((cur) => {
+        if (cur !== threadId) return cur;
+        const idx  = prev.findIndex((t) => t.threadId === threadId);
+        const next = remaining[idx] ?? remaining[idx - 1] ?? null;
+        return next?.threadId ?? null;
       });
-    },
-    [activeThreadId, tabs],
-  );
+      return remaining;
+    });
 
-  // ── Open upload panel (from "+ Add PDF" button) ───────────────────────────
+    // Best-effort backend cleanup
+    deleteSession(threadId).catch(() => {});
+  }, []);
+
+  // ── Show upload panel ───────────────────────────────────────────────────
   const handleShowUploadPanel = useCallback(() => {
     setShowUploadPanel(true);
     setUploadError(null);
-    setActiveThreadId(null); // deselect current tab while uploading
   }, []);
 
-  // ── Ask: text mode ────────────────────────────────────────────────────────
-  const handleAskText = useCallback(async () => {
-    if (!activeTab || !textInput.trim() || isAsking) return;
-
-    const question = textInput.trim();
-    const { threadId } = activeTab;
-    setTextInput('');
-    appendMessage(threadId, 'user', question);
-    setIsAsking(true);
-
-    const result = await askText(threadId, question);
-    setIsAsking(false);
-
-    if (result.success && result.answer) {
-      appendMessage(threadId, 'assistant', result.answer, result.sources, true);
-    } else {
-      appendMessage(
-        threadId,
-        'assistant',
-        result.error ?? 'Something went wrong. Please try again.',
-      );
+  // ── Open a history entry as a tab ──────────────────────────────────────
+  // If the entry is already open as a tab → just switch to it (same memory).
+  // Otherwise → restore backend session + open the tab linked to same entry id.
+  const restoreFromHistory = useCallback(async (entry: PdfChatHistoryEntry) => {
+    // Already open? Switch to it — same thread, same memory.
+    const existing = tabs.find((t) => t.historyEntryId === entry.id);
+    if (existing) {
+      setActiveThreadId(existing.threadId);
+      setShowUploadPanel(false);
+      return;
     }
-  }, [activeTab, textInput, isAsking, appendMessage]);
 
-  // ── Ask: speech mode — two-step pipeline ─────────────────────────────────
+    // Try to recover the ChromaDB session so the user can keep asking questions
+    let threadId = `view_${crypto.randomUUID().slice(0, 8)}`;
+    if (entry.fileHash) {
+      try {
+        const res = await createSessionFromHash(entry.fileHash, entry.fileName);
+        if (res.success && res.thread_id) threadId = res.thread_id;
+      } catch { /* continue — messages still visible, user just can't ask new ones */ }
+    }
+
+    const messages: PdfChatMessage[] = entry.messages.map((m) => ({ ...m, isStreaming: false }));
+
+    // Link tab to the SAME history entry — any new messages will update it in-place
+    const restoredTab: PdfTab = {
+      threadId,
+      fileHash:        entry.fileHash ?? '',
+      fileName:        entry.fileName,
+      messages,
+      startedAt:       new Date().toISOString(),
+      historyEntryId:  entry.id,
+    };
+
+    setTabs((prev) => [...prev, restoredTab]);
+    setActiveThreadId(threadId);
+    setShowUploadPanel(false);
+  }, [tabs]);
+
+  // ── Refs (avoid stale closures in async callbacks) ──────────────────────
+  const activeTabRef  = useRef(activeTab);  activeTabRef.current  = activeTab;
+  const textInputRef  = useRef(textInput);  textInputRef.current  = textInput;
+  const isAskingRef   = useRef(isAsking);   isAskingRef.current   = isAsking;
+
+  // ── Ask: text mode ──────────────────────────────────────────────────────
+  const handleAskText = useCallback(async () => {
+    const tab   = activeTabRef.current;
+    const input = textInputRef.current;
+    if (!tab || !input.trim() || isAskingRef.current) return;
+
+    const question   = input.trim();
+    const { threadId } = tab;
+
+    setTextInput('');
+    setIsAsking(true);
+    appendMessage(threadId, 'user', question);
+
+    try {
+      const result = await askText(threadId, question);
+      appendMessage(
+        threadId, 'assistant',
+        result.success && result.answer
+          ? result.answer
+          : result.error ?? 'Something went wrong. Please try again.',
+        result.sources,
+        result.success,
+      );
+    } catch {
+      appendMessage(threadId, 'assistant', 'Network error. Please try again.');
+    } finally {
+      setIsAsking(false);
+    }
+  }, [appendMessage]);
+
+  // ── Ask: speech mode ────────────────────────────────────────────────────
   const handleSubmitSpeech = useCallback(async () => {
-    if (!activeTab || !recordedBlob || isAsking) return;
+    const tab = activeTabRef.current;
+    if (!tab || !recordedBlob || isAskingRef.current) return;
 
-    const { threadId } = activeTab;
+    const { threadId } = tab;
     setIsAsking(true);
 
-    // ── Step 1: STT — transcribe audio, show question immediately ──────────
+    // STT
     let transcript: string;
     try {
-      const sttResult = await transcribeAudio(recordedBlob);
-      if (!sttResult.success || !sttResult.transcript) {
+      const stt = await transcribeAudio(recordedBlob);
+      if (!stt.success || !stt.transcript) {
         appendMessage(threadId, 'user', '🎤 Voice question');
-        appendMessage(threadId, 'assistant', sttResult.error ?? 'Could not transcribe audio. Please try again.');
+        appendMessage(threadId, 'assistant', stt.error ?? 'Could not transcribe audio.');
         setIsAsking(false);
         return;
       }
-      transcript = sttResult.transcript;
-      // Show the transcribed text immediately — user sees what they said
+      transcript = stt.transcript;
       appendMessage(threadId, 'user', transcript);
-    } catch (err) {
+    } catch {
       appendMessage(threadId, 'user', '🎤 Voice question');
       appendMessage(threadId, 'assistant', 'Transcription failed. Please try again.');
       setIsAsking(false);
       return;
     }
 
-    // ── Step 2: Get text answer immediately using askText ───────────────────
+    // RAG answer
     let answerText = '';
     try {
       const result = await askText(threadId, transcript);
       if (!result.success || !result.answer) {
-        appendMessage(
-          threadId,
-          'assistant',
-          result.error ?? 'Could not generate an answer. Please try again.',
-        );
+        appendMessage(threadId, 'assistant', result.error ?? 'Could not generate an answer.');
         setIsAsking(false);
         return;
       }
       answerText = result.answer;
       appendMessage(threadId, 'assistant', answerText, result.sources, true);
-      setIsAsking(false);
-    } catch (err) {
+    } catch {
       appendMessage(threadId, 'assistant', 'Something went wrong. Please try again.');
+    } finally {
       setIsAsking(false);
-      return;
     }
 
-    // ── Step 3: Stream TTS audio in background ──────────────────────────────
+    // TTS (non-blocking)
     try {
-      const spokenAnswer = answerText.split('\n\n📄 Sources:')[0];
-      const ttsResponse = await streamTtsAudio(spokenAnswer);
-      if (ttsResponse.ok) {
-        playStream(ttsResponse).catch(() => {/* audio errors don't block chat */});
-      }
-    } catch (err) {
-      console.error('Failed to stream audio:', err);
-    }
-  }, [activeTab, recordedBlob, isAsking, appendMessage, playStream]);
+      const spoken = answerText.split('\n\n📄 Sources:')[0];
+      const tts    = await streamTtsAudio(spoken);
+      if (tts.ok) playStream(tts).catch(() => {});
+    } catch { /* silent */ }
+  }, [recordedBlob, appendMessage, playStream]);
 
   return {
-    // Tab state
-    tabs,
-    activeThreadId,
-    activeTab,
-    // Upload panel
-    showUploadPanel,
-    isUploading,
-    uploadError,
-    // Chat input
-    mode,
-    textInput,
-    isAsking,
-    isSpeaking,
-    isPaused,
-    isRecording,
-    recordedBlob,
-    // Setters
-    setMode,
-    setTextInput,
-    // Actions
-    handleUpload,
-    handleSelectTab,
-    handleCloseTab,
-    handleShowUploadPanel,
-    handleAskText,
-    handleSubmitSpeech,
-    startRecording,
-    stopRecording,
-    pauseAudio,
-    resumeAudio,
-    stopAudio,
+    tabs, activeThreadId, activeTab,
+    showUploadPanel, isUploading, uploadError,
+    mode, textInput, isAsking, isSpeaking, isPaused, isRecording, recordedBlob,
+    setMode, setTextInput,
+    handleUpload, handleSelectTab, handleCloseTab, handleShowUploadPanel,
+    handleAskText, handleSubmitSpeech,
+    startRecording, stopRecording,
+    pauseAudio, resumeAudio, stopAudio,
     markMessageStreamingComplete,
+    restoreFromHistory,
   };
 }

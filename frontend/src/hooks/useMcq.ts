@@ -3,9 +3,10 @@ import type {
   McqPhase, McqQuestion, McqAnswer, McqSessionConfig,
   McqFeedback, McqQuestionType, McqQuestionCount,
   McqSourceType, McqReviewFilter, McqTimerConfig, McqTimerMode,
-  McqAnswerStatus,
+  McqAnswerStatus, McqHistoryEntry,
 } from '../types';
 import { generateQuestions, fetchFeedback } from '../api/mcqApi';
+import { saveMcqEntry } from './useHistory';
 
 const DEFAULT_CONFIG: McqSessionConfig = {
   source_type:    'text',
@@ -52,6 +53,7 @@ export function useMcq() {
   const [feedback, setFeedback]                   = useState<McqFeedback | null>(null);
   const [isFeedbackLoading, setIsFeedbackLoading] = useState(false);
   const [reviewFilter, setReviewFilter]           = useState<McqReviewFilter>('all');
+  const [reportSaved, setReportSaved]             = useState(false);
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const currentQuestion = questions[currentIndex] ?? null;
@@ -301,6 +303,7 @@ export function useMcq() {
     setReviewFilter('all');
     setTimeRemaining(0);
     setIsTimerRunning(false);
+    setReportSaved(false);
     setPhase('quiz');
     // Restart timer if configured
     if (timerConfig.mode === 'per-question') {
@@ -324,6 +327,7 @@ export function useMcq() {
     setReviewFilter('all');
     setFailedUrls([]);
     setUrlList([]);
+    setReportSaved(false);
     setPhase('setup');
   }, [stopTimer]);
 
@@ -346,6 +350,7 @@ export function useMcq() {
     setFailedUrls([]);
     setTimeRemaining(0);
     setIsTimerRunning(false);
+    setReportSaved(false);
     setConfig(DEFAULT_CONFIG);
   }, [stopTimer]);
 
@@ -355,6 +360,31 @@ export function useMcq() {
     if (reviewFilter === 'wrong')   return !a.is_correct;
     return true;
   });
+
+  const handleSaveMcqReport = useCallback(() => {
+    if (!feedback || reportSaved) return;
+
+    const topicLabel = config.topic?.trim()
+      || config.source_type.charAt(0).toUpperCase() + config.source_type.slice(1);
+
+    const entry: McqHistoryEntry = {
+      id: crypto.randomUUID(),
+      savedAt: new Date().toISOString(),
+      topic: topicLabel,
+      sourceType: config.source_type,
+      questionType: config.question_type,
+      questionCount: questions.length,
+      score: feedback.score,
+      total: feedback.total,
+      grade: feedback.grade,
+      feedback,
+      questions,
+      answers,
+    };
+
+    saveMcqEntry(entry);
+    setReportSaved(true);
+  }, [feedback, reportSaved, config, questions, answers]);
 
   return {
     phase,
@@ -385,5 +415,7 @@ export function useMcq() {
     handleRetake,
     handleNewSameTopic,
     handleEndSession,
+    reportSaved,
+    handleSaveMcqReport,
   };
 }

@@ -58,10 +58,12 @@ export interface PdfChatMessage {
 }
 
 export interface PdfTab {
-  threadId: string;
-  fileHash: string;
-  fileName: string;
-  messages: PdfChatMessage[];
+  threadId:        string;
+  fileHash:        string;
+  fileName:        string;
+  messages:        PdfChatMessage[];
+  startedAt?:      string;   // ISO timestamp — when the tab was opened
+  historyEntryId?: string;   // set when opened from history — on close we update that entry, not create new
 }
 
 export interface UploadResponse {
@@ -385,9 +387,10 @@ export interface ChatMessage {
 }
 
 export interface PdfChatHistoryEntry {
-  id: string;
-  savedAt: string;
-  fileName: string;
+  id:           string;
+  savedAt:      string;
+  fileName:     string;
+  fileHash:     string;         // SHA-256 — used to restore session from ChromaDB
   messageCount: number;
-  messages: ChatMessage[];
+  messages:     PdfChatMessage[];
 }

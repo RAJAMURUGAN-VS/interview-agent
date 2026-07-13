@@ -95,3 +95,27 @@ export async function deleteSession(threadId: string): Promise<void> {
     body: JSON.stringify({ thread_id: threadId }),
   });
 }
+
+/**
+ * Create a new session for an already-embedded PDF (IDB cache hit).
+ * The backend reuses the existing ChromaDB collection for this fileHash
+ * without re-processing the file.
+ * POST /pdf-chat/session-from-hash
+ */
+export async function createSessionFromHash(
+  fileHash: string,
+  fileName: string,
+): Promise<UploadResponse> {
+  try {
+    const res = await fetch(`${BASE}/pdf-chat/session-from-hash`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file_hash: fileHash, file_name: fileName }),
+    });
+    return res.json();
+  } catch {
+    // If the endpoint doesn't exist yet, signal a cache-miss so caller falls back to full upload
+    return { success: false, error: 'cache-miss' };
+  }
+}
+

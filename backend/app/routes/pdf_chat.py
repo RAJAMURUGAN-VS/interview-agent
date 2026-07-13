@@ -256,3 +256,68 @@ def delete_session():
 
     clear_session(thread_id)
     return jsonify({"success": True})
+
+
+@bp.route("/pdf-chat/session-from-hash", methods=["POST"])
+def session_from_hash():
+    """
+    Create a new conversation session for a PDF that is already embedded in ChromaDB.
+    The frontend calls this when its IndexedDB cache has the fileHash but the session
+    was lost (e.g. backend restarted). We look up the existing Chroma collection and
+    create a fresh thread without re-processing the file.
+    """
+    data = request.json or {}
+    file_hash = data.get("file_hash", "").strip()
+    file_name = data.get("file_name", "unknown.pdf").strip()
+
+    if not file_hash:
+        return jsonify({"success": False, "error": "Missing file_hash"}), 400
+
+    # Check if the vector store is already in memory
+    vector_store = _cached_vector_stores.get(file_hash)
+
+    if not vector_store:
+        # Try to reload from the persisted ChromaDB directory
+        try:
+            from langchain_chroma import Chroma
+            from langchain_huggingface import HuggingFaceEmbeddings
+
+            # Reuse the shared embeddings model from rag_service
+            from ..services.rag_service import _embeddings
+
+            collection_name = f"pdf_chat_{file_hash}"
+            persist_dir = "./chroma_pdf_db"
+
+            # Check if the collection exists on disk
+            import chromadb
+            client = chromadb.PersistentClient(path=persist_dir)
+            existing = [c.name for c in client.list_collections()]
+
+            if collection_name not in existing:
+                # Collection doesn't exist — frontend must re-upload
+                return jsonify({
+                    "success": False,
+                    "error": "collection-not-found",
+                }), 404
+
+            vector_store = Chroma(
+                collection_name=collection_name,
+                embedding_function=_embeddings,
+                persist_directory=persist_dir,
+            )
+            _cached_vector_stores[file_hash] = vector_store
+            print(f"[session-from-hash] Reloaded collection {collection_name} from disk")
+        except Exception as e:
+            print(f"[session-from-hash] Failed to reload collection: {e}")
+            return jsonify({"success": False, "error": str(e)}), 500
+
+    # Create a fresh thread for this session
+    thread_id = create_session(file_hash, model)
+    print(f"[session-from-hash] Created thread {thread_id} for hash {file_hash[:8]}… ({file_name})")
+
+    return jsonify({
+        "success": True,
+        "thread_id": thread_id,
+        "file_hash": file_hash,
+    })
+

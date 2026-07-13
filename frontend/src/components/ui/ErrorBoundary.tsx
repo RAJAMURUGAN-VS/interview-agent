@@ -1,6 +1,6 @@
 import { Component, type ReactNode } from 'react';
 
-interface Props  { children: ReactNode; }
+interface Props  { children: ReactNode; className?: string; }
 interface State  { hasError: boolean; }
 
 export class ErrorBoundary extends Component<Props, State> {
@@ -16,6 +16,8 @@ export class ErrorBoundary extends Component<Props, State> {
         </div>
       );
     }
-    return this.props.children;
+    const { className, children } = this.props;
+    if (!className) return <>{children}</>;
+    return <div className={className}>{children}</div>;
   }
 }

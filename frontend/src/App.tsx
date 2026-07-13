@@ -14,8 +14,8 @@ export default function App() {
       <NavBar />
 
       {/* Below the fixed navbar */}
-      <main className="pt-16 min-h-screen overflow-y-auto">
-        <ErrorBoundary>
+      <main className="pt-16 min-h-screen flex flex-col">
+        <ErrorBoundary className="flex-1 flex flex-col">
           <Routes>
             {/* Root */}
             <Route path="/" element={<Navigate to="/interview" replace />} />

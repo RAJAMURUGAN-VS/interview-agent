@@ -17,21 +17,23 @@ const FILTER_TABS: { value: McqReviewFilter; label: string }[] = [
 ];
 
 interface Props {
-  feedback:        McqFeedback;
-  questions:       McqQuestion[];
-  answers:         McqAnswer[];
-  filteredAnswers: McqAnswer[];
-  reviewFilter:    McqReviewFilter;
-  onFilterChange:  (f: McqReviewFilter) => void;
-  onRetake:        () => void;
-  onNewSameTopic:  () => void;
-  onEndSession:    () => void;
+  feedback:         McqFeedback;
+  questions:        McqQuestion[];
+  answers:          McqAnswer[];
+  filteredAnswers:  McqAnswer[];
+  reviewFilter:     McqReviewFilter;
+  reportSaved:      boolean;
+  onFilterChange:   (f: McqReviewFilter) => void;
+  onRetake:         () => void;
+  onNewSameTopic:   () => void;
+  onEndSession:     () => void;
+  onSaveReport:     () => void;
 }
 
 export default function FeedbackView({
   feedback, questions, answers, filteredAnswers,
-  reviewFilter, onFilterChange,
-  onRetake, onNewSameTopic, onEndSession,
+  reviewFilter, reportSaved, onFilterChange,
+  onRetake, onNewSameTopic, onEndSession, onSaveReport,
 }: Props) {
   const questionMap = Object.fromEntries(questions.map((q) => [q.id, q]));
 
@@ -102,6 +104,27 @@ export default function FeedbackView({
           ))}
         </ul>
       </div>
+
+      {/* Save report */}
+      {!reportSaved ? (
+        <button
+          onClick={onSaveReport}
+          className="w-full flex items-center justify-center gap-2
+            py-2.5 px-4 rounded-xl border border-[#2a2a3d]
+            hover:border-[#4f46e5] hover:bg-[#4f46e5]/5
+            text-sm font-medium text-[#8b8ba8] hover:text-[#f0f0ff]
+            transition-all duration-200"
+        >
+          <i className="fas fa-floppy-disk text-[#4f46e5]" />
+          Save Report to History
+        </button>
+      ) : (
+        <div className="flex items-center justify-center gap-2 text-sm
+          text-[#22c55e] animate-fade-in">
+          <i className="fas fa-circle-check" />
+          Report saved to history
+        </div>
+      )}
 
       {/* Review section */}
       <div>
