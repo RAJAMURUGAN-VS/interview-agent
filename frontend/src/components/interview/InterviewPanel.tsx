@@ -1,4 +1,4 @@
-import type { InterviewPhase, FeedbackData, DepartmentKey } from '../../types';
+import type { InterviewPhase, FeedbackData, DepartmentKey, InterviewSaveType } from '../../types';
 import InterviewSetup from './InterviewSetup';
 import QuestionTracker from './QuestionTracker';
 import SpeakingBubble from './SpeakingBubble';
@@ -19,6 +19,7 @@ interface Props {
   recordedBlob: Blob | null;
   feedbackData: FeedbackData | null;
   isFeedbackLoading: boolean;
+  reportSaved: boolean;
   handleSelectDepartment: (key: DepartmentKey) => void;
   toggleSubject: (subject: string) => void;
   addCustomSubject: () => void;
@@ -30,15 +31,16 @@ interface Props {
   endInterview: () => void;
   getFeedback: () => void;
   resetInterview: () => void;
+  handleSaveReport: (type: InterviewSaveType) => void;
 }
 
 export default function InterviewPanel(props: Props) {
   const {
     phase, selectedDeptKey, selectedSubjects, customSubjectInput, questionNumber, recordingStatus,
     isSpeaking, isRecording, recordedBlob,
-    feedbackData, isFeedbackLoading,
+    feedbackData, isFeedbackLoading, reportSaved,
     handleSelectDepartment, toggleSubject, addCustomSubject, removeCustomSubject, setCustomSubjectInput,
-    startInterview, toggleRecording, submitAnswer, endInterview, getFeedback, resetInterview,
+    startInterview, toggleRecording, submitAnswer, endInterview, getFeedback, resetInterview, handleSaveReport,
   } = props;
 
   // Welcome / Setup phase
@@ -64,8 +66,10 @@ export default function InterviewPanel(props: Props) {
       <FeedbackSection
         isFeedbackLoading={isFeedbackLoading}
         feedbackData={feedbackData}
+        reportSaved={reportSaved}
         onGetFeedback={getFeedback}
         onNewInterview={resetInterview}
+        onSaveReport={handleSaveReport}
       />
     );
   }

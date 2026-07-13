@@ -3,8 +3,9 @@ import { useMediaRecorder } from './useMediaRecorder';
 import { useAudioStream } from './useAudioStream';
 import * as interviewApi from '../api/interviewApi';
 import { useAppStore } from '../store/appStore';
-import type { InterviewPhase, FeedbackData, DepartmentKey } from '../types';
+import type { InterviewPhase, FeedbackData, DepartmentKey, InterviewMessage, InterviewSaveType, InterviewHistoryEntry } from '../types';
 import { getDepartmentByKey } from '../data/departmentSubjects';
+import { saveInterviewEntry } from './useHistory';
 
 export function useInterview() {
   const [phase, setPhase] = useState<InterviewPhase>('welcome');
@@ -15,10 +16,16 @@ export function useInterview() {
   const [recordingStatus, setRecordingStatus] = useState('Click Start Interview to begin');
   const [feedbackData, setFeedbackData] = useState<FeedbackData | null>(null);
   const [isFeedbackLoading, setIsFeedbackLoading] = useState(false);
+  const [conversation, setConversation] = useState<InterviewMessage[]>([]);
+  const [reportSaved, setReportSaved] = useState(false);
 
   const { isRecording, recordedBlob, startRecording, stopRecording } = useMediaRecorder();
   const { isSpeaking, playStream } = useAudioStream();
   const store = useAppStore();
+
+  const appendToConversation = useCallback((msg: InterviewMessage) => {
+    setConversation((prev) => [...prev, msg]);
+  }, []);
 
   const handleSelectDepartment = useCallback((key: DepartmentKey) => {
     setSelectedDeptKey(key);
@@ -89,6 +96,15 @@ export function useInterview() {
     setRecordingStatus('Submitting...');
     try {
       const { meta, response } = await interviewApi.submitAnswer(recordedBlob);
+      
+      // Track candidate answer
+      const questionNumber = meta.questionNumber ?? 1;
+      appendToConversation({
+        role: 'candidate',
+        content: '[Spoken answer]',
+        questionNumber: questionNumber - 1,
+      });
+
       if (meta.questionNumber && meta.questionNumber > 1) {
         setQuestionNumber(meta.questionNumber);
       }
@@ -138,8 +154,33 @@ export function useInterview() {
     setRecordingStatus('Click Start Interview to begin');
     setFeedbackData(null);
     setIsFeedbackLoading(false);
+    setConversation([]);
+    setReportSaved(false);
     store.reset();
   }
+
+  const handleSaveReport = useCallback((saveType: InterviewSaveType) => {
+    if (!feedbackData || reportSaved) return;
+
+    const currentSubject = selectedSubjects.join(', ') || selectedDeptKey;
+    const entry: InterviewHistoryEntry = {
+      id: crypto.randomUUID(),
+      savedAt: new Date().toISOString(),
+      subject: currentSubject,
+      department: selectedDeptKey
+        ? (getDepartmentByKey(selectedDeptKey)?.label ?? '')
+        : '',
+      saveType,
+      score: saveType !== 'conversation'
+        ? (feedbackData.candidate_score ?? null)
+        : null,
+      conversation: saveType !== 'feedback' ? conversation : null,
+      feedback: saveType !== 'conversation' ? feedbackData : null,
+    };
+
+    saveInterviewEntry(entry);
+    setReportSaved(true);
+  }, [feedbackData, reportSaved, selectedSubjects, selectedDeptKey, conversation]);
 
   return {
     phase,
@@ -164,5 +205,7 @@ export function useInterview() {
     endInterview,
     getFeedback,
     resetInterview,
+    reportSaved,
+    handleSaveReport,
   };
 }
