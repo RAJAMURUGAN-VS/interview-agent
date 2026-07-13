@@ -1,8 +1,9 @@
 import { useState, useCallback } from 'react';
-import type { PdfTab, PdfChatMessage, ChatMode } from '../types';
-import { uploadPdf, askText, transcribeAudio, askSpeechAnswer, streamTtsAudio, deleteSession } from '../api/pdfChatApi';
+import type { PdfTab, PdfChatMessage, ChatMode, PdfChatHistoryEntry } from '../types';
+import { uploadPdf, askText, transcribeAudio, streamTtsAudio, deleteSession } from '../api/pdfChatApi';
 import { useAudioStream } from './useAudioStream';
 import { useMediaRecorder } from './useMediaRecorder';
+import { savePdfChatEntry } from './useHistory';
 
 export function usePdfChat() {
   // ── Tab state ────────────────────────────────────────────────────────────
@@ -95,9 +96,22 @@ export function usePdfChat() {
     setTextInput('');
   }, []);
 
-  // ── Close a tab ───────────────────────────────────────────────────────────
+  // ── Close a tab — auto-save before closing ────────────────────────────────
   const handleCloseTab = useCallback(
     (threadId: string) => {
+      // Auto-save conversation to history
+      const tabToClose = tabs.find((t) => t.threadId === threadId);
+      if (tabToClose && tabToClose.messages.length > 0) {
+        const entry: PdfChatHistoryEntry = {
+          id: crypto.randomUUID(),
+          savedAt: new Date().toISOString(),
+          fileName: tabToClose.fileName,
+          messageCount: tabToClose.messages.length,
+          messages: tabToClose.messages,
+        };
+        savePdfChatEntry(entry);
+      }
+
       // Tell backend to free memory — fire and forget
       deleteSession(threadId);
 
@@ -117,7 +131,7 @@ export function usePdfChat() {
         return remaining;
       });
     },
-    [activeThreadId],
+    [activeThreadId, tabs],
   );
 
   // ── Open upload panel (from "+ Add PDF" button) ───────────────────────────
