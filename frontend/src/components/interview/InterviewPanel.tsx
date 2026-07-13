@@ -1,4 +1,5 @@
 import type { InterviewPhase, FeedbackData, DepartmentKey, InterviewSaveType } from '../../types';
+import { useState } from 'react';
 import InterviewSetup from './InterviewSetup';
 import QuestionTracker from './QuestionTracker';
 import SpeakingBubble from './SpeakingBubble';
@@ -6,6 +7,10 @@ import RecordButton from './RecordButton';
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';
 import FeedbackSection from '../feedback/FeedbackSection';
+import HistoryPanel from '../history/HistoryPanel';
+import InterviewHistoryCard from '../history/InterviewHistoryCard';
+import HistoryEmpty from '../history/HistoryEmpty';
+import { useInterviewHistory } from '../../hooks/useHistory';
 
 interface Props {
   phase: InterviewPhase;
@@ -43,20 +48,61 @@ export default function InterviewPanel(props: Props) {
     startInterview, toggleRecording, submitAnswer, endInterview, getFeedback, resetInterview, handleSaveReport,
   } = props;
 
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const { entries, deleteEntry, refresh } = useInterviewHistory();
+
   // Welcome / Setup phase
   if (phase === 'welcome') {
     return (
-      <InterviewSetup
-        selectedDeptKey={selectedDeptKey}
-        selectedSubjects={selectedSubjects}
-        customSubjectInput={customSubjectInput}
-        onSelectDept={handleSelectDepartment}
-        onToggleSubject={toggleSubject}
-        onCustomInputChange={setCustomSubjectInput}
-        onCustomSubjectAdd={addCustomSubject}
-        onCustomSubjectRemove={removeCustomSubject}
-        onStart={startInterview}
-      />
+      <>
+        {/* History button */}
+        <div className="flex justify-end mb-4">
+          <button
+            onClick={() => { refresh(); setHistoryOpen(true); }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg
+              border border-[#2a2a3d] text-xs font-medium text-[#8b8ba8]
+              hover:border-[#4f46e5] hover:text-[#f0f0ff]
+              transition-all duration-200"
+          >
+            <i className="fas fa-clock-rotate-left text-[#4f46e5]" />
+            History
+            {entries.length > 0 && (
+              <span className="ml-0.5 bg-[#4f46e5] text-white text-[10px]
+                w-4 h-4 rounded-full flex items-center justify-center font-bold">
+                {entries.length}
+              </span>
+            )}
+          </button>
+        </div>
+        <InterviewSetup
+          selectedDeptKey={selectedDeptKey}
+          selectedSubjects={selectedSubjects}
+          customSubjectInput={customSubjectInput}
+          onSelectDept={handleSelectDepartment}
+          onToggleSubject={toggleSubject}
+          onCustomInputChange={setCustomSubjectInput}
+          onCustomSubjectAdd={addCustomSubject}
+          onCustomSubjectRemove={removeCustomSubject}
+          onStart={startInterview}
+        />
+        <HistoryPanel
+          isOpen={historyOpen}
+          onClose={() => setHistoryOpen(false)}
+          title="Interview History"
+        >
+          {entries.length === 0 ? (
+            <HistoryEmpty message="Complete an interview and save your report to see it here." />
+          ) : (
+            entries.map((entry) => (
+              <InterviewHistoryCard
+                key={entry.id}
+                entry={entry}
+                onDelete={deleteEntry}
+              />
+            ))
+          )}
+        </HistoryPanel>
+      </>
     );
   }
 
