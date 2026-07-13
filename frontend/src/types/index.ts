@@ -340,3 +340,54 @@ export interface InsightsSearchResponse {
   preparations:     PreparationStrategyPost[];
   error?:           string;
 }
+
+// ── History ───────────────────────────────────────────
+
+export interface InterviewMessage {
+  role: 'interviewer' | 'candidate';
+  content: string;
+  questionNumber?: number;
+}
+
+export type InterviewSaveType = 'conversation' | 'feedback' | 'both';
+
+export interface InterviewHistoryEntry {
+  id: string;
+  savedAt: string;
+  subject: string;
+  department: string;
+  saveType: InterviewSaveType;
+  score: number | null;
+  conversation: InterviewMessage[] | null;
+  feedback: FeedbackData | null;
+}
+
+export interface McqHistoryEntry {
+  id: string;
+  savedAt: string;
+  topic: string;
+  sourceType: string;
+  questionType: string;
+  questionCount: number;
+  score: number;
+  total: number;
+  grade: string;
+  feedback: McqFeedback;
+  questions: McqQuestion[];
+  answers: McqAnswer[];
+}
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+  timestamp?: Date;
+}
+
+export interface PdfChatHistoryEntry {
+  id: string;
+  savedAt: string;
+  fileName: string;
+  messageCount: number;
+  messages: ChatMessage[];
+}
