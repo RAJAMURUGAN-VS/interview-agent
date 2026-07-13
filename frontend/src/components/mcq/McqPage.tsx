@@ -1,6 +1,7 @@
+import { useState } from 'react';
 import { useMcq } from '../../hooks/useMcq';
+import { useMcqHistory } from '../../hooks/useHistory';
 import { ErrorBoundary } from '../ui/ErrorBoundary';
-import SetupPanel    from './SetupPanel';
 import QuizView      from './QuizView';
 import FeedbackView  from './FeedbackView';
 import CustomisePanel from './CustomisePanel';
@@ -8,14 +9,10 @@ import TextUpload    from './TextUpload';
 import PdfUpload     from './PdfUpload';
 import UrlInput      from './UrlInput';
 import ReviewCard    from './ReviewCard';
-import type { McqSourceType, McqQuestionType, McqQuestionCount, McqReviewFilter } from '../../types';
-
-const GRADE_COLOR: Record<string, string> = {
-  'Excellent':      'text-[#22c55e]',
-  'Good':           'text-[#3b82f6]',
-  'Needs Revision': 'text-[#f59e0b]',
-  'Poor':           'text-[#ef4444]',
-};
+import HistoryPanel from '../history/HistoryPanel';
+import McqHistoryCard from '../history/McqHistoryCard';
+import HistoryEmpty from '../history/HistoryEmpty';
+import type { McqSourceType, McqReviewFilter } from '../../types';
 
 const FILTER_TABS: { value: McqReviewFilter; label: string }[] = [
   { value: 'all',     label: 'All' },
@@ -25,19 +22,39 @@ const FILTER_TABS: { value: McqReviewFilter; label: string }[] = [
 
 export default function McqPage() {
   const mcq = useMcq();
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const { entries, deleteEntry } = useMcqHistory();
 
   // Page header — shared across all phases
   const header = (
-    <div className="mb-6">
-      <p className="text-xs uppercase tracking-widest text-[#4f46e5] font-medium mb-1">
-        Practice Mode
-      </p>
-      <h1 className="text-2xl font-bold text-[#f0f0ff] tracking-tight">
-        MCQ Practice
-      </h1>
-      <p className="text-sm text-[#8b8ba8] mt-1">
-        Upload your notes, customise your quiz, and test your knowledge
-      </p>
+    <div className="mb-6 flex items-start justify-between">
+      <div>
+        <p className="text-xs uppercase tracking-widest text-[#4f46e5] font-medium mb-1">
+          Practice Mode
+        </p>
+        <h1 className="text-2xl font-bold text-[#f0f0ff] tracking-tight">
+          MCQ Practice
+        </h1>
+        <p className="text-sm text-[#8b8ba8] mt-1">
+          Upload your notes, customise your quiz, and test your knowledge
+        </p>
+      </div>
+      <button
+        onClick={() => setHistoryOpen(true)}
+        className="flex items-center gap-2 px-4 py-2 rounded-lg
+          border border-[#2a2a3d] hover:border-[#4f46e5]
+          text-[#8b8ba8] hover:text-[#f0f0ff] text-sm font-medium
+          transition-all duration-200"
+      >
+        <i className="fas fa-history" />
+        History
+        {entries.length > 0 && (
+          <span className="ml-1 px-2 py-0.5 rounded-md bg-[#4f46e5]/20
+            border border-[#4f46e5]/30 text-[#4f46e5] text-xs font-semibold">
+            {entries.length}
+          </span>
+        )}
+      </button>
     </div>
   );
 
@@ -282,95 +299,21 @@ export default function McqPage() {
         {mcq.phase === 'feedback' && !mcq.isFeedbackLoading && mcq.feedback && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
 
-            {/* Left col — score + weak areas + tips + actions (sticky) */}
+            {/* Left col — FeedbackView component (sticky) */}
             <div className="flex flex-col gap-4 lg:sticky lg:top-24">
-
-              {/* Score card */}
-              <div className="card text-center">
-                <p className="text-xs uppercase tracking-widest text-[#8b8ba8] font-medium mb-3">
-                  Quiz Complete
-                </p>
-                <div className={`text-5xl font-bold mb-1 ${GRADE_COLOR[mcq.feedback.grade]}`}>
-                  {mcq.feedback.score}
-                  <span className="text-2xl text-[#4a4a6a]">/{mcq.feedback.total}</span>
-                </div>
-                <p className={`text-lg font-semibold mb-3 ${GRADE_COLOR[mcq.feedback.grade]}`}>
-                  {mcq.feedback.grade}
-                </p>
-                <div className="w-full h-2 bg-[#1c1c27] rounded-full overflow-hidden mb-4">
-                  <div
-                    className="h-full rounded-full transition-all duration-1000"
-                    style={{
-                      width: `${mcq.feedback.percentage}%`,
-                      background: mcq.feedback.percentage >= 90 ? '#22c55e'
-                                : mcq.feedback.percentage >= 70 ? '#3b82f6'
-                                : mcq.feedback.percentage >= 50 ? '#f59e0b' : '#ef4444',
-                    }}
-                  />
-                </div>
-                <p className="text-sm text-[#8b8ba8] leading-relaxed">{mcq.feedback.summary}</p>
-              </div>
-
-              {/* Weak areas */}
-              {mcq.feedback.weak_areas.length > 0 && (
-                <div className="card">
-                  <p className="text-xs uppercase tracking-widest text-[#f59e0b] font-medium mb-3">
-                    <i className="fas fa-triangle-exclamation mr-1.5" />Focus Areas
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {mcq.feedback.weak_areas.map((area) => (
-                      <span key={area}
-                        className="text-xs px-3 py-1 rounded-lg
-                          bg-[#f59e0b]/10 border border-[#f59e0b]/20 text-[#f59e0b] font-medium">
-                        {area}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Study tips */}
-              <div className="card">
-                <p className="text-xs uppercase tracking-widest text-[#4a4a6a] font-medium mb-3">
-                  <i className="fas fa-lightbulb mr-1.5 text-[#f59e0b]" />Study Tips
-                </p>
-                <ul className="space-y-2.5">
-                  {mcq.feedback.study_tips.map((tip, i) => (
-                    <li key={i} className="flex items-start gap-2.5 text-sm text-[#8b8ba8] leading-relaxed">
-                      <span className="flex-shrink-0 w-5 h-5 rounded-full
-                        bg-[#4f46e5]/10 border border-[#4f46e5]/20
-                        flex items-center justify-center text-[10px] font-bold text-[#4f46e5] mt-0.5">
-                        {i + 1}
-                      </span>
-                      {tip}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              {/* Action buttons */}
-              <div className="flex flex-col gap-2">
-                <button onClick={mcq.handleRetake}
-                  className="flex items-center justify-center gap-2 py-3 px-4
-                    rounded-xl bg-[#4f46e5] hover:bg-[#4338ca] text-white
-                    text-sm font-semibold transition-all duration-200
-                    hover:shadow-[0_0_12px_rgba(79,70,229,0.3)]">
-                  <i className="fas fa-rotate-right" />Retake Same
-                </button>
-                <button onClick={mcq.handleNewSameTopic}
-                  className="flex items-center justify-center gap-2 py-3 px-4
-                    rounded-xl border border-[#2a2a3d] hover:border-[#4f46e5]
-                    text-[#8b8ba8] hover:text-[#f0f0ff] text-sm font-semibold
-                    transition-all duration-200 hover:bg-[#1c1c27]">
-                  <i className="fas fa-wand-magic-sparkles" />New Questions
-                </button>
-                <button onClick={mcq.handleEndSession}
-                  className="flex items-center justify-center gap-2 py-3 px-4
-                    rounded-xl border border-[#2a2a3d] text-[#4a4a6a]
-                    hover:text-[#8b8ba8] text-sm font-semibold transition-all duration-200">
-                  <i className="fas fa-xmark" />End Session
-                </button>
-              </div>
+              <FeedbackView
+                feedback={mcq.feedback}
+                questions={mcq.questions}
+                answers={mcq.answers}
+                filteredAnswers={mcq.filteredAnswers}
+                reviewFilter={mcq.reviewFilter}
+                reportSaved={mcq.reportSaved}
+                onFilterChange={mcq.setReviewFilter}
+                onRetake={mcq.handleRetake}
+                onNewSameTopic={mcq.handleNewSameTopic}
+                onEndSession={mcq.handleEndSession}
+                onSaveReport={mcq.handleSaveMcqReport}
+              />
             </div>
 
             {/* Right col — scrollable review list */}
@@ -423,6 +366,24 @@ export default function McqPage() {
         )}
 
       </ErrorBoundary>
+
+      <HistoryPanel
+        isOpen={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        title="MCQ Practice History"
+      >
+        {entries.length === 0 ? (
+          <HistoryEmpty message="Complete a quiz and save your report to see it here." />
+        ) : (
+          entries.map((entry) => (
+            <McqHistoryCard
+              key={entry.id}
+              entry={entry}
+              onDelete={deleteEntry}
+            />
+          ))
+        )}
+      </HistoryPanel>
     </div>
   );
 }

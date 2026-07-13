@@ -30,6 +30,7 @@ export default function InterviewPage() {
         recordedBlob={interview.recordedBlob}
         feedbackData={interview.feedbackData}
         isFeedbackLoading={interview.isFeedbackLoading}
+        reportSaved={interview.reportSaved}
         handleSelectDepartment={interview.handleSelectDepartment}
         toggleSubject={interview.toggleSubject}
         addCustomSubject={interview.addCustomSubject}
@@ -41,6 +42,7 @@ export default function InterviewPage() {
         endInterview={interview.endInterview}
         getFeedback={interview.getFeedback}
         resetInterview={interview.resetInterview}
+        handleSaveReport={interview.handleSaveReport}
       />
     </div>
   );
