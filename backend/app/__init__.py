@@ -42,6 +42,8 @@ def create_app():
     # ── Register blueprints ──────────────────────────────────────────────
     from .routes import interview, feedback, pdf_chat, mcq, codefill
     from .routes import insights as insights_routes
+    from .routes import playlist as playlist_routes
+    from .routes import doubt_solver as doubt_solver_routes
 
     app.register_blueprint(interview.bp)
     app.register_blueprint(feedback.bp)
@@ -49,6 +51,8 @@ def create_app():
     app.register_blueprint(mcq.bp)
     app.register_blueprint(codefill.bp)
     app.register_blueprint(insights_routes.bp)
+    app.register_blueprint(playlist_routes.bp)
+    app.register_blueprint(doubt_solver_routes.bp)
 
     # ── Create tables + seed on first run ───────────────────────────────
     with app.app_context():

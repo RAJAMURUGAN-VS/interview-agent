@@ -7,6 +7,8 @@ import PdfChatPage from './pages/PdfChatPage';
 import McqPage from './components/mcq/McqPage';
 import CodeFillPage from './components/codefill/CodeFillPage';
 import InsightsPage from './components/insights/InsightsPage';
+import PlaylistPage from './components/playlist/PlaylistPage';
+import DoubtSolverPage from './components/doubtsolver/DoubtSolverPage';
 
 export default function App() {
   return (
@@ -40,6 +42,12 @@ export default function App() {
 
             {/* Insights route */}
             <Route path="/insights" element={<InsightsPage />} />
+
+            {/* Playlist route */}
+            <Route path="/playlist" element={<PlaylistPage />} />
+
+            {/* Doubt Solver route */}
+            <Route path="/doubt-solver" element={<DoubtSolverPage />} />
 
             {/* Fallback */}
             <Route path="*" element={<Navigate to="/interview" replace />} />

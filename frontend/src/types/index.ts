@@ -9,7 +9,7 @@ export type InterviewSelectionStep = 'department' | 'subject';
 
 export type NotesSubject = 'OS' | 'OOP' | 'DBMS' | 'CN';
 
-export type AppTab = 'interview' | 'notes' | 'pdf-chat' | 'mcq' | 'codefill';
+export type AppTab = 'interview' | 'notes' | 'pdf-chat' | 'mcq' | 'codefill' | 'doubt-solver';
 
 export type InterviewPhase = 'welcome' | 'active' | 'feedback';
 
@@ -393,4 +393,109 @@ export interface PdfChatHistoryEntry {
   fileHash:     string;         // SHA-256 — used to restore session from ChromaDB
   messageCount: number;
   messages:     PdfChatMessage[];
+}
+
+// ── Playlist Generator ────────────────────────────────
+
+export type PlaylistPrivacy = 'public' | 'unlisted' | 'private';
+
+export interface RoadmapSection {
+  id: string;
+  title: string;
+  description: string;
+  order: number;
+  targetMinutes: number;
+}
+
+export interface VideoCandidate {
+  videoId: string;
+  title: string;
+  channelTitle: string;
+  durationSeconds: number;
+  viewCount: number;
+  thumbnailUrl: string;
+  url: string;
+}
+
+export interface SelectedVideo extends VideoCandidate {
+  sectionId: string;
+  position: number;
+}
+
+export type PlaylistJobPhase =
+  | 'roadmap'
+  | 'searching'
+  | 'ranking'
+  | 'awaiting_connection'
+  | 'creating_playlist'
+  | 'complete'
+  | 'error';
+
+export interface PlaylistGenerationJob {
+  jobId?: string;
+  phase: PlaylistJobPhase;
+  roadmap?: RoadmapSection[];
+  selectedVideos?: SelectedVideo[];
+  targetDurationMinutes: number;
+  actualDurationMinutes?: number;
+  playlistUrl?: string;
+  errorMessage?: string;
+}
+
+export interface PlaylistRoadmapResponse {
+  success: boolean;
+  roadmap?: RoadmapSection[];
+  error?: string;
+}
+
+export interface PlaylistConnectionStatusResponse {
+  connected: boolean;
+  channel_title?: string;
+}
+
+export interface PlaylistConnectTokenResponse {
+  connect_url?: string;
+  success?: boolean;
+  error?: string;
+}
+
+export interface PlaylistGenerateResponse {
+  success: boolean;
+  job_id?: string;
+  error?: string;
+}
+
+
+// ── Doubt Solver ──────────────────────────────────────
+
+export interface ResourceLink {
+  title: string;
+  url: string;
+  source?: string;  // domain, for documentation/practice_resources
+  description?: string;  // for github_examples
+}
+
+export interface VideoResult {
+  title: string;
+  url: string;
+  channel?: string;
+  reason: string;
+}
+
+export interface DoubtSolverResult {
+  explanation: string;
+  youtubeVideos: VideoResult[];
+  documentation: ResourceLink[];
+  practiceResources: ResourceLink[];
+  githubExamples: ResourceLink[];
+}
+
+export interface DoubtSolverResponse {
+  success: boolean;
+  explanation?: string;
+  youtube_videos?: VideoResult[];
+  documentation?: ResourceLink[];
+  practice_resources?: ResourceLink[];
+  github_examples?: ResourceLink[];
+  error?: string;
 }

@@ -8,7 +8,10 @@ const TABS = [
   { to: '/mcq',       icon: 'fas fa-circle-question', label: 'MCQ'       },
   { to: '/codefill',  icon: 'fas fa-code',            label: 'Code Fill' },
   { to: '/insights',  icon: 'fas fa-lightbulb',       label: 'Insights'  },
+  { to: '/doubt-solver', icon: 'fas fa-brain',        label: 'Doubt Solver' },
+  { to: '/playlist',  icon: 'fas fa-route',           label: 'Playlist'  },
 ];
+
 
 export default function NavBar() {
   const [menuOpen, setMenuOpen] = useState(false);
