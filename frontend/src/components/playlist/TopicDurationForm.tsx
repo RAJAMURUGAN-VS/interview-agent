@@ -9,28 +9,25 @@ interface Props {
   onSubmit: () => void;
 }
 
-// Helper to extract duration from natural language
-function extractDurationFromText(text: string): number {
-  // Match patterns like "in 5 days", "in 2 weeks", "in 3 hours", "in 1 month"
-  const patterns = [
-    { regex: /in\s+(\d+(?:\.\d+)?)\s*(?:hour|hr|h)s?/gi, multiplier: 1 },
-    { regex: /in\s+(\d+(?:\.\d+)?)\s*(?:day|d)s?/gi, multiplier: 24 },
-    { regex: /in\s+(\d+(?:\.\d+)?)\s*(?:week|w)s?/gi, multiplier: 24 * 7 },
-    { regex: /in\s+(\d+(?:\.\d+)?)\s*(?:month|m)s?/gi, multiplier: 24 * 30 },
-  ];
+// Preset duration options
+const DURATION_PRESETS = [
+  { label: '1 hr',    hours: 1,   icon: 'fa-bolt' },
+  { label: '3 hrs',   hours: 3,   icon: 'fa-clock' },
+  { label: '5 hrs',   hours: 5,   icon: 'fa-clock' },
+  { label: '10 hrs',  hours: 10,  icon: 'fa-graduation-cap' },
+  { label: '20 hrs',  hours: 20,  icon: 'fa-book-open' },
+  { label: '40 hrs',  hours: 40,  icon: 'fa-trophy' },
+];
 
-  for (const { regex, multiplier } of patterns) {
-    const match = regex.exec(text);
-    if (match) {
-      const value = parseFloat(match[1]);
-      if (!isNaN(value) && value > 0) {
-        return value * multiplier;
-      }
-    }
-  }
-
-  return 0; // No duration found
-}
+// Suggested topics for quick-fill
+const SUGGESTED_TOPICS = [
+  'React & TypeScript',
+  'System Design',
+  'Python for Data Science',
+  'Machine Learning',
+  'DSA for Interviews',
+  'Node.js & Express',
+];
 
 export default function TopicDurationForm({
   topic,
@@ -41,35 +38,36 @@ export default function TopicDurationForm({
   onSubmit,
 }: Props) {
   const [focused, setFocused] = useState(false);
+  const [customHours, setCustomHours] = useState('');
+  const [showCustom, setShowCustom] = useState(false);
+
+  const isPreset = DURATION_PRESETS.some((p) => p.hours === durationHours);
+  const canSubmit = !isLoading && topic.trim().length > 2 && durationHours > 0;
 
   const handleKey = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !isLoading && topic.trim()) onSubmit();
+    if (e.key === 'Enter' && canSubmit) onSubmit();
   };
 
-  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const text = e.target.value;
-    onTopicChange(text);
-
-    // Extract duration from the text
-    const extractedHours = extractDurationFromText(text);
-    if (extractedHours > 0) {
-      onDurationChange(extractedHours);
+  const handleCustomSubmit = () => {
+    const val = parseFloat(customHours);
+    if (!isNaN(val) && val >= 0.5 && val <= 200) {
+      onDurationChange(val);
+      setShowCustom(false);
     }
   };
 
-  // Extract and display detected duration
-  const detectedHours = extractDurationFromText(topic);
-  const getDurationDisplay = () => {
-    if (detectedHours === 0) return null;
-    if (detectedHours < 24) return `${detectedHours} hours`;
-    if (detectedHours < 24 * 7) return `${Math.round(detectedHours / 24)} days`;
-    if (detectedHours < 24 * 30) return `${Math.round(detectedHours / (24 * 7))} weeks`;
-    return `${Math.round(detectedHours / (24 * 30))} months`;
+  const formatDuration = (h: number) => {
+    if (h < 1) return `${Math.round(h * 60)} min`;
+    if (h === 1) return '1 hour';
+    if (h < 24) return `${h} hours`;
+    const days = Math.round(h / 8); // ~8h/day study
+    return `${h} hours (~${days} study days)`;
   };
 
   return (
     <div className="animate-fade-in space-y-8">
-      {/* Hero header */}
+
+      {/* ── Hero header ───────────────────────────────────────────────── */}
       <div className="text-center space-y-3">
         <div
           className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-2"
@@ -78,93 +76,189 @@ export default function TopicDurationForm({
             boxShadow: '0 0 32px rgba(79,70,229,0.4)',
           }}
         >
-          <i className="fas fa-route text-white text-2xl" />
+          <i className="fas fa-clapperboard text-white text-2xl" />
         </div>
         <h1 className="text-3xl font-bold" style={{ color: 'var(--text-primary)' }}>
           AI Playlist Generator
         </h1>
         <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>
-          Tell us your learning goal with a timeframe, and we'll build a structured YouTube
-          learning playlist just for you.
+          Enter a topic and choose your study duration — we'll build a structured
+          YouTube learning playlist tailored for you.
         </p>
       </div>
 
-      {/* Form card */}
+      {/* ── Form card ─────────────────────────────────────────────────── */}
       <div className="card space-y-6">
-        {/* Main input - Natural language */}
+
+        {/* Topic input */}
         <div className="space-y-3">
-          <label className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
-            Enter a clear learning goal
+          <label
+            className="text-sm font-semibold flex items-center gap-2"
+            style={{ color: 'var(--text-primary)' }}
+          >
+            <i className="fas fa-lightbulb" style={{ color: 'var(--accent)' }} />
+            What do you want to learn?
           </label>
 
-          {/* Help text with examples */}
-          <div
-            className="px-4 py-3 rounded-lg text-sm"
-            style={{
-              background: 'var(--bg-secondary)',
-              color: 'var(--text-secondary)',
-              borderLeft: '3px solid var(--accent)',
-            }}
-          >
-            <p className="mb-2 font-medium">Examples:</p>
-            <ul className="space-y-1 text-xs" style={{ color: 'var(--text-muted)' }}>
-              <li>• "I want to learn Python basics in 3 days"</li>
-              <li>• "I need to master data science in 2 weeks"</li>
-              <li>• "Learn web development in 5 hours"</li>
-              <li>• "Study cloud computing in 1 month"</li>
-            </ul>
+          <div style={{ position: 'relative' }}>
+            <input
+              id="input-playlist-topic"
+              type="text"
+              placeholder="e.g. React, System Design, Python, Machine Learning…"
+              value={topic}
+              onChange={(e) => onTopicChange(e.target.value)}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
+              onKeyDown={handleKey}
+              disabled={isLoading}
+              className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+              style={{
+                background: 'var(--bg-elevated)',
+                border: `2px solid ${focused ? 'var(--accent)' : 'var(--border)'}`,
+                color: 'var(--text-primary)',
+                boxShadow: focused ? '0 0 0 3px rgba(79,70,229,0.15)' : 'none',
+                transition: 'all 0.2s',
+                paddingRight: '2.5rem',
+              }}
+            />
+            {topic && (
+              <button
+                onClick={() => onTopicChange('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 transition-opacity"
+                style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}
+                tabIndex={-1}
+              >
+                <i className="fas fa-times-circle" />
+              </button>
+            )}
           </div>
 
-          {/* Textarea input */}
-          <textarea
-            placeholder="e.g., I want to learn Python basics in 3 days"
-            value={topic}
-            onChange={handleTextChange}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
-            onKeyDown={handleKey}
-            disabled={isLoading}
-            rows={3}
-            className="w-full px-4 py-3 rounded-xl text-sm outline-none resize-none"
-            style={{
-              background: 'var(--bg-elevated)',
-              border: `2px solid ${focused ? 'var(--accent)' : 'var(--border)'}`,
-              color: 'var(--text-primary)',
-              boxShadow: focused ? '0 0 0 3px rgba(79,70,229,0.15)' : 'none',
-              transition: 'all 0.2s',
-              cursor: isLoading ? 'not-allowed' : 'text',
-              opacity: isLoading ? 0.6 : 1,
-            }}
-          />
+          {/* Quick suggestions */}
+          <div className="flex flex-wrap gap-2">
+            {SUGGESTED_TOPICS.map((s) => (
+              <button
+                key={s}
+                onClick={() => onTopicChange(s)}
+                className="px-3 py-1 rounded-full text-xs font-medium transition-all"
+                style={{
+                  background: topic === s ? 'var(--accent)' : 'var(--bg-elevated)',
+                  color: topic === s ? '#fff' : 'var(--text-secondary)',
+                  border: `1px solid ${topic === s ? 'var(--accent)' : 'var(--border)'}`,
+                  transform: 'none',
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.transform = 'translateY(-1px)'; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.transform = 'none'; }}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
 
-          {/* Detected duration feedback */}
-          {detectedHours > 0 && (
-            <div
-              className="px-4 py-2 rounded-lg text-sm flex items-center gap-2 animate-fade-in"
-              style={{
-                background: 'var(--accent)',
-                color: '#fff',
-              }}
+        {/* Divider */}
+        <div style={{ height: 1, background: 'var(--border)' }} />
+
+        {/* Duration picker */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <label
+              className="text-sm font-semibold flex items-center gap-2"
+              style={{ color: 'var(--text-primary)' }}
             >
-              <i className="fas fa-check-circle" />
-              <span>
-                <strong>Duration detected:</strong> {getDurationDisplay()}
+              <i className="fas fa-clock" style={{ color: 'var(--accent)' }} />
+              Target Study Duration
+            </label>
+            {durationHours > 0 && (
+              <span
+                className="text-xs font-medium px-2.5 py-1 rounded-full"
+                style={{ background: 'rgba(79,70,229,0.15)', color: 'var(--accent)' }}
+              >
+                {formatDuration(durationHours)}
               </span>
-            </div>
-          )}
+            )}
+          </div>
 
-          {/* No duration warning */}
-          {topic.trim() && detectedHours === 0 && (
-            <div
-              className="px-4 py-2 rounded-lg text-sm flex items-center gap-2"
+          {/* Preset chips */}
+          <div className="grid grid-cols-3 gap-2">
+            {DURATION_PRESETS.map((p) => {
+              const active = durationHours === p.hours;
+              return (
+                <button
+                  key={p.hours}
+                  onClick={() => { onDurationChange(p.hours); setShowCustom(false); }}
+                  className="flex flex-col items-center justify-center py-3 rounded-xl text-sm font-semibold transition-all"
+                  style={{
+                    background: active
+                      ? 'linear-gradient(135deg, #4f46e5, #7c3aed)'
+                      : 'var(--bg-elevated)',
+                    color: active ? '#fff' : 'var(--text-secondary)',
+                    border: `2px solid ${active ? 'transparent' : 'var(--border)'}`,
+                    boxShadow: active ? '0 4px 16px rgba(79,70,229,0.35)' : 'none',
+                    transform: active ? 'translateY(-1px)' : 'none',
+                    transition: 'all 0.18s',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!active) (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)';
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!active) (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)';
+                  }}
+                >
+                  <i className={`fas ${p.icon} mb-1`} style={{ fontSize: '0.85rem' }} />
+                  {p.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Custom duration row */}
+          {!showCustom ? (
+            <button
+              onClick={() => setShowCustom(true)}
+              className="w-full py-2 rounded-xl text-xs font-medium transition-all flex items-center justify-center gap-2"
               style={{
-                background: 'rgba(239, 68, 68, 0.1)',
-                color: 'var(--danger)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
+                background: !isPreset && durationHours > 0 ? 'rgba(79,70,229,0.1)' : 'var(--bg-elevated)',
+                border: `1px dashed ${!isPreset && durationHours > 0 ? 'var(--accent)' : 'var(--border)'}`,
+                color: !isPreset && durationHours > 0 ? 'var(--accent)' : 'var(--text-muted)',
               }}
             >
-              <i className="fas fa-info-circle" />
-              <span>Include a timeframe like "in 3 days" or "in 2 weeks"</span>
+              <i className="fas fa-sliders" />
+              {!isPreset && durationHours > 0
+                ? `Custom: ${formatDuration(durationHours)} — click to change`
+                : 'Set custom duration'}
+            </button>
+          ) : (
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min="0.5"
+                max="200"
+                step="0.5"
+                placeholder="Hours (e.g. 7.5)"
+                value={customHours}
+                onChange={(e) => setCustomHours(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleCustomSubmit(); }}
+                autoFocus
+                className="flex-1 px-3 py-2 rounded-lg text-sm outline-none"
+                style={{
+                  background: 'var(--bg-elevated)',
+                  border: '2px solid var(--accent)',
+                  color: 'var(--text-primary)',
+                }}
+              />
+              <button
+                onClick={handleCustomSubmit}
+                className="btn-primary px-4 py-2 text-sm"
+              >
+                Set
+              </button>
+              <button
+                onClick={() => setShowCustom(false)}
+                className="px-3 py-2 text-sm rounded-lg transition-colors"
+                style={{ color: 'var(--text-muted)', background: 'var(--bg-elevated)' }}
+              >
+                ✕
+              </button>
             </div>
           )}
         </div>
@@ -173,13 +267,13 @@ export default function TopicDurationForm({
         <button
           id="btn-generate-roadmap"
           onClick={onSubmit}
-          disabled={isLoading || !topic.trim() || detectedHours === 0}
-          className="btn-primary w-full py-3 text-base font-semibold gap-2"
+          disabled={!canSubmit}
+          className="btn-primary w-full py-3.5 text-base font-semibold gap-2"
           style={{
-            boxShadow:
-              topic.trim() && detectedHours > 0 ? '0 0 20px rgba(79,70,229,0.35)' : undefined,
-            opacity: detectedHours === 0 ? 0.6 : 1,
-            cursor: detectedHours === 0 ? 'not-allowed' : 'pointer',
+            boxShadow: canSubmit ? '0 0 24px rgba(79,70,229,0.4)' : 'none',
+            opacity: canSubmit ? 1 : 0.5,
+            cursor: canSubmit ? 'pointer' : 'not-allowed',
+            transition: 'all 0.2s',
           }}
         >
           {isLoading ? (
@@ -196,16 +290,15 @@ export default function TopicDurationForm({
         </button>
       </div>
 
-      {/* Info section */}
-      <div className="space-y-2">
-        <p className="text-center text-xs" style={{ color: 'var(--text-muted)' }}>
-          <i className="fas fa-lightbulb mr-1" style={{ color: 'var(--accent)' }} />
-          The system automatically detects the duration from your goal. Be specific with timeframes
-          for best results.
+      {/* Footer hints */}
+      <div className="flex flex-col gap-1.5 text-center">
+        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+          <i className="fas fa-route mr-1" style={{ color: 'var(--accent)' }} />
+          A structured roadmap is generated first — review it before we search YouTube.
         </p>
-        <p className="text-center text-xs" style={{ color: 'var(--text-muted)' }}>
-          <i className="fas fa-check-circle mr-1" style={{ color: 'var(--accent)' }} />
-          The roadmap is generated first — you can review and adjust it before we search YouTube.
+        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+          <i className="fas fa-youtube mr-1" style={{ color: '#ff0000' }} />
+          Videos are ranked by quality and matched to your total duration target.
         </p>
       </div>
     </div>

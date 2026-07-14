@@ -96,9 +96,18 @@ export async function generatePlaylist(params: {
 
 /**
  * Poll job progress. Maps snake_case backend response to camelCase.
+ * Throws a JobLostError on 404 (server restarted, job wiped from memory).
  */
+export class JobLostError extends Error {
+  constructor() {
+    super('SERVER_RESTARTED');
+    this.name = 'JobLostError';
+  }
+}
+
 export async function getPlaylistJobStatus(jobId: string): Promise<PlaylistGenerationJob> {
   const res = await fetch(`${BASE}/playlist/status/${encodeURIComponent(jobId)}`);
+  if (res.status === 404) throw new JobLostError();
   const data = await res.json();
   return {
     phase:                  data.phase,

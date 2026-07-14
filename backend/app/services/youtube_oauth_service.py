@@ -217,8 +217,9 @@ def _get_valid_token(external_user_id: str) -> str:
 
     if not entry:
         raise ValueError(
-            f"No YouTube account connected for user {external_user_id}. "
-            "Please complete the Google OAuth flow first."
+            "No YouTube account connected for this session. "
+            "The server may have restarted, which clears stored tokens. "
+            "Please click 'Connect YouTube Account' again to re-authorise."
         )
 
     # Token still valid
@@ -257,11 +258,40 @@ def _raise_for_youtube_error(resp: requests.Response) -> None:
     """Raise a descriptive ValueError for YouTube API errors."""
     if resp.status_code < 400:
         return
+
     try:
         error_body = resp.json()
         error_info = error_body.get("error", {})
-        msg = error_info.get("message", resp.text)
-        code = error_info.get("code", resp.status_code)
-        raise ValueError(f"YouTube API error {code}: {msg}")
-    except (ValueError, KeyError):
+        errors     = error_info.get("errors", [])
+        reason     = errors[0].get("reason", "") if errors else ""
+        code       = error_info.get("code", resp.status_code)
+        msg        = error_info.get("message", "Unknown error")
+    except Exception:
         raise ValueError(f"YouTube API error {resp.status_code}: {resp.text[:300]}")
+
+    # Translate known error reasons into actionable messages
+    if reason == "youtubeSignupRequired":
+        raise ValueError(
+            "Your Google account does not have a YouTube channel. "
+            "Please go to youtube.com, sign in with the same account, "
+            "and create a YouTube channel. Then try connecting again."
+        )
+    if code == 401 or reason in ("authError", "unauthorized"):
+        raise ValueError(
+            "YouTube authorization failed. The access token may have expired "
+            "(this can happen when the server restarts). "
+            "Please disconnect and reconnect your YouTube account, then try again."
+        )
+    if reason == "forbidden" or code == 403:
+        raise ValueError(
+            "YouTube API access denied. Make sure the YouTube Data API v3 is "
+            "enabled in your Google Cloud Console project and that the OAuth "
+            "scopes include youtube and youtube.force-ssl."
+        )
+    if reason == "quotaExceeded" or code == 429:
+        raise ValueError(
+            "YouTube API quota exceeded. The playlist could not be created. "
+            "Try again tomorrow (quota resets at midnight Pacific time)."
+        )
+
+    raise ValueError(f"YouTube API error {code}: {msg}")

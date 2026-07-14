@@ -62,25 +62,16 @@ def generate_roadmap_endpoint():
 @bp.route("/connection-status", methods=["GET"])
 def connection_status_endpoint():
     """
-    Check whether a user has connected their YouTube account.
-    Checks our direct Google OAuth token store first; falls back to Pipedream.
+    Check whether a user has a valid Google OAuth token stored server-side.
+    Only returns connected:true when we actually have a token that can
+    make YouTube write calls. A Pipedream-only connection is NOT sufficient.
     """
     external_user_id = request.args.get("external_user_id", "").strip()
     if not external_user_id:
         return jsonify({"success": False, "error": "external_user_id is required"}), 400
 
-    # Primary: direct Google OAuth token
-    if yt_oauth.is_youtube_connected(external_user_id):
-        return jsonify({"connected": True, "channel_title": None, "method": "google_oauth"})
-
-    # Fallback: Pipedream account check
-    try:
-        status = pd_svc.get_connected_account(external_user_id)
-        return jsonify({**status, "method": "pipedream"})
-    except Exception as exc:
-        logger.exception("Connection status check failed")
-        return jsonify({"success": False, "error": str(exc)}), 500
-
+    connected = yt_oauth.is_youtube_connected(external_user_id)
+    return jsonify({"connected": connected, "method": "google_oauth" if connected else None})
 
 # ---------------------------------------------------------------------------
 # POST /playlist/connect-token  (Pipedream — kept for UI discovery)
@@ -198,15 +189,17 @@ def start_generation_endpoint():
     if privacy not in ("public", "unlisted", "private"):
         privacy = "public"
 
-    # Check YouTube is connected (either Google OAuth or Pipedream)
+    # Require a direct Google OAuth token — Pipedream connection alone is not
+    # enough because we call YouTube APIs server-side using our stored token.
     if not yt_oauth.is_youtube_connected(external_user_id):
-        pd_status = pd_svc.get_connected_account(external_user_id)
-        if not pd_status.get("connected"):
-            return jsonify({
-                "success": False,
-                "error": "YouTube account not connected. Please connect your account first.",
-                "needs_connection": True,
-            }), 403
+        return jsonify({
+            "success": False,
+            "error": (
+                "YouTube account not connected for this session. "
+                "Please click 'Connect YouTube Account' to authorise with Google."
+            ),
+            "needs_connection": True,
+        }), 403
 
     try:
         job_id = playlist_service.start_generation_job(

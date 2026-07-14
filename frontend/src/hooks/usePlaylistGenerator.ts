@@ -9,6 +9,7 @@ import {
   getGoogleAuthUrl,
   generatePlaylist,
   getPlaylistJobStatus,
+  JobLostError,
 } from '../api/playlistApi';
 
 // ── Local-storage / session-storage keys ─────────────────────────────────
@@ -74,9 +75,14 @@ export function usePlaylistGenerator(): UsePlaylistGeneratorReturn {
   const connectPollRef    = useRef<ReturnType<typeof setInterval> | null>(null);
   const connectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Roadmap ref so inner functions always see the latest value
-  const roadmapRef = useRef<RoadmapSection[] | null>(null);
-  roadmapRef.current = roadmap;
+  // Value refs — always hold the latest state so async callbacks
+  // (polling intervals) never read stale closure values
+  const roadmapRef      = useRef<RoadmapSection[] | null>(null);
+  const topicRef        = useRef<string>('');
+  const durationHrsRef  = useRef<number>(5);
+  roadmapRef.current     = roadmap;
+  topicRef.current       = topic;
+  durationHrsRef.current = durationHours;
 
   // ── On mount: detect Google OAuth callback (?yt_connected=true) ────────
   useEffect(() => {
@@ -204,14 +210,16 @@ export function usePlaylistGenerator(): UsePlaylistGeneratorReturn {
 
   // ── Internal: start backend generation job ────────────────────────────
   async function _kickOffGeneration() {
-    const currentRoadmap = roadmapRef.current;
-    if (!currentRoadmap) return;
+    const currentRoadmap   = roadmapRef.current;
+    const currentTopic     = topicRef.current;
+    const currentDuration  = durationHrsRef.current;
+    if (!currentRoadmap || !currentTopic.trim()) return;
     setAppPhase('generating');
     try {
       const res = await generatePlaylist({
         externalUserId,
-        topic: topic.trim(),
-        durationHours,
+        topic: currentTopic.trim(),
+        durationHours: currentDuration,
         roadmap: currentRoadmap,
         privacy: 'public',
       });
@@ -282,8 +290,17 @@ export function usePlaylistGenerator(): UsePlaylistGeneratorReturn {
           setErrorMessage(status.errorMessage ?? 'An unknown error occurred');
           setAppPhase('error');
         }
-      } catch {
-        // swallow transient poll errors
+      } catch (err) {
+        if (err instanceof JobLostError) {
+          // Server restarted — job is gone from memory
+          stopJobPolling();
+          sessionStorage.removeItem(SS_JOB_ID_KEY);
+          setErrorMessage(
+            'The server restarted and the job was lost. Please try generating your playlist again.',
+          );
+          setAppPhase('error');
+        }
+        // Other transient errors: keep polling
       }
     };
 
