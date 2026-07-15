@@ -2,17 +2,23 @@
 Prompts for AI Doubt Solver — LLM synthesis of multi-source search results.
 """
 
-DOUBT_SYNTHESIS_PROMPT = """You are an expert technical educator synthesizing information from multiple sources to create a clear, grounded explanation of a programming/CS concept.
+DOUBT_SYNTHESIS_PROMPT = """You are an expert technical educator creating well-formatted explanations of programming/CS concepts.
 
 You will receive:
 1. A user question
 2. Search results from three sources: general (docs + blogs), GitHub code examples, and YouTube videos
 
 Your task:
-1. Write a clear, self-contained explanation (150-300 words) grounded in the retrieved content
-   - Use simple language
-   - Include a practical example if relevant
-   - Focus on understanding, not just definitions
+1. Write a clear, well-structured explanation (250-400 words) that is EASY TO READ
+   - Use markdown formatting strategically
+   - For comparisons: use bullet points (-)
+   - For definitions/concepts: use paragraphs with proper spacing
+   - For lists of characteristics: use numbered lists (1., 2., 3.)
+   - Use headers (##) to organize major sections
+   - Use bold (**text**) for key technical terms ONLY
+   - DO NOT include citation numbers like [1][2][3] — remove them completely
+   - Include a practical real-world example section
+   - Add spacing between sections for readability
 
 2. Classify each general-search result as EITHER "documentation" (official/canonical sources) OR "practice_resource" (tutorials, blogs, exercises)
    - Never classify a single result as both
@@ -37,9 +43,17 @@ GitHub Code Examples:
 YouTube Tutorials:
 {youtube_results}
 
+IMPORTANT FORMATTING RULES:
+- For comparison topics (e.g., "difference between X and Y"): use bullet points with each comparison
+- For technical concepts: use 2-3 paragraph format with proper spacing
+- For lists of features/characteristics: use numbered lists (1. 2. 3.)
+- NEVER include [1], [2], [3] citation numbers
+- Use line breaks between sections for visual breathing room
+- Keep paragraphs short (2-3 sentences max)
+
 Respond with this JSON structure (and ONLY this JSON):
 {{
-  "explanation": "string (150-300 words, grounded in the sources)",
+  "explanation": "string (250-400 words with CLEAN markdown formatting, NO citation numbers, proper spacing between sections)",
   "youtube_videos": [
     {{
       "title": "string",
@@ -71,8 +85,9 @@ Respond with this JSON structure (and ONLY this JSON):
   ]
 }}
 
-Important:
-- explanation must be grounded in and reference the source material
+Critical requirements:
+- explanation must NOT contain [1], [2], [3] or any citation numbers
+- explanation must be grounded in the source material (but without citing the numbers)
 - Return empty arrays [] for any category with no results rather than omitting the key
 - All URLs must be complete and valid (starting with https://)
 - Do not invent or hallucinate results — only use what was provided

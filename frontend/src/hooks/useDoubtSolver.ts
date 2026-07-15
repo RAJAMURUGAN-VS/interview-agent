@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import type { DoubtSolverResult } from '../types';
 import { askDoubt } from '../api/doubtSolverApi';
+import { useSectionCache } from '../context/SectionCacheContext';
 
 const LS_HISTORY_KEY = 'doubt_solver_history';
 const MAX_HISTORY = 5;
@@ -21,10 +22,16 @@ export interface UseDoubtSolverReturn {
 }
 
 export function useDoubtSolver(): UseDoubtSolverReturn {
-  const [phase, setPhase] = useState<'idle' | 'loading' | 'answered' | 'error'>('idle');
-  const [question, setQuestion] = useState('');
-  const [result, setResult] = useState<DoubtSolverResult | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Get persistent cache from context
+  const { doubtSolverCache, setDoubtSolverCache } = useSectionCache();
+
+  // Initialize local state from cache
+  const [phase, setPhase] = useState<'idle' | 'loading' | 'answered' | 'error'>(
+    doubtSolverCache.phase
+  );
+  const [question, setQuestion] = useState(doubtSolverCache.question);
+  const [result, setResult] = useState<DoubtSolverResult | null>(doubtSolverCache.result);
+  const [errorMessage, setErrorMessage] = useState<string | null>(doubtSolverCache.errorMessage);
   const [recentQuestions, setRecentQuestions] = useState<string[]>([]);
 
   // Load recent questions from localStorage on mount
@@ -43,6 +50,16 @@ export function useDoubtSolver(): UseDoubtSolverReturn {
   useEffect(() => {
     localStorage.setItem(LS_HISTORY_KEY, JSON.stringify(recentQuestions));
   }, [recentQuestions]);
+
+  // Sync state to context cache whenever it changes
+  useEffect(() => {
+    setDoubtSolverCache({
+      phase,
+      question,
+      result,
+      errorMessage,
+    });
+  }, [phase, question, result, errorMessage, setDoubtSolverCache]);
 
   const addToHistory = useCallback((q: string) => {
     setRecentQuestions((prev) => {

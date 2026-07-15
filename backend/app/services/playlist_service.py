@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 # LLM instance (same model as rest of app)
 # ---------------------------------------------------------------------------
 _model = init_chat_model(
-    "perplexity:sonar-pro",
+    "perplexity:sonar",
     api_key=Config.PERPLEXITY_API_KEY,
 )
 

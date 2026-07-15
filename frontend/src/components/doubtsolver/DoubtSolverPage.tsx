@@ -30,7 +30,7 @@ export default function DoubtSolverPage() {
             <i className="fas fa-lightbulb text-white text-2xl" />
           </div>
           <h1 className="text-3xl font-bold" style={{ color: 'var(--text-primary)' }}>
-            AI Doubt Solver
+            Doubt Solver
           </h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>
             Ask any concept-based question and get a comprehensive answer with curated resources.

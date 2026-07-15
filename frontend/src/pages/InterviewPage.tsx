@@ -11,7 +11,7 @@ export default function InterviewPage() {
           Mock Technical Interview
         </p>
         <h1 className="text-2xl font-bold text-[#f0f0ff] tracking-tight mb-1">
-          Natalie AI
+          Nivetha
         </h1>
         <p className="text-sm text-[#8b8ba8]">
           Practice mock placement interviews and get instant feedback

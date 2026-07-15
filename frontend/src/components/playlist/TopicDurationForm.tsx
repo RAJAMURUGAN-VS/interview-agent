@@ -79,7 +79,7 @@ export default function TopicDurationForm({
           <i className="fas fa-clapperboard text-white text-2xl" />
         </div>
         <h1 className="text-3xl font-bold" style={{ color: 'var(--text-primary)' }}>
-          AI Playlist Generator
+          Playlist Generator
         </h1>
         <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>
           Enter a topic and choose your study duration — we'll build a structured

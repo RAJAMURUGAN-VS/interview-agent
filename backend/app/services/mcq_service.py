@@ -16,7 +16,7 @@ from ..utils.mcq_prompts import (
 
 # Separate model instance — using Perplexity Sonar
 _model = init_chat_model(
-    "perplexity:sonar-pro",
+    "perplexity:sonar",
     api_key=Config.PERPLEXITY_API_KEY,
 )
 

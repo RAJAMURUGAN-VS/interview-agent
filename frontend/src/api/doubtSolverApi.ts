@@ -17,11 +17,18 @@ export async function askDoubt(
     body: JSON.stringify({ question }),
   });
 
-  if (!res.ok) {
+  // Try to parse response as JSON for better error messages
+  let data: DoubtSolverResponse;
+  try {
+    data = await res.json();
+  } catch (e) {
     throw new Error(`Failed to ask doubt: ${res.status} ${res.statusText}`);
   }
 
-  const data: DoubtSolverResponse = await res.json();
+  // Check for API-level errors first
+  if (!res.ok) {
+    throw new Error(`Failed to ask doubt: ${data.error || res.statusText}`);
+  }
 
   if (!data.success) {
     throw new Error(data.error || 'Failed to generate answer');

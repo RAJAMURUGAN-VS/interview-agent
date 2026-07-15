@@ -19,7 +19,7 @@ class SessionState:
 session = SessionState(0, "", "", "interview_session")
 
 model = init_chat_model(
-    "perplexity:sonar-pro",
+    "perplexity:sonar",
     api_key=Config.PERPLEXITY_API_KEY
 )
 

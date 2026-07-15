@@ -8,7 +8,7 @@ from ..utils.codefill_prompts import (
 )
 
 _model = init_chat_model(
-    "perplexity:sonar-pro",
+    "perplexity:sonar",
     api_key=Config.PERPLEXITY_API_KEY,
 )
 

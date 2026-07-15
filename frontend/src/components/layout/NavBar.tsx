@@ -33,7 +33,7 @@ export default function NavBar() {
             <i className="fas fa-graduation-cap text-white text-sm" />
           </div>
           <span className="font-bold text-[#f0f0ff] tracking-tight hidden sm:block">
-            PlacementPrep <span className="text-[#4f46e5]">AI</span>
+            PlacementPrep 
           </span>
           <span className="font-bold text-[#f0f0ff] tracking-tight sm:hidden">
             Prep<span className="text-[#4f46e5]">AI</span>

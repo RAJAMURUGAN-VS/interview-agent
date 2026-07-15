@@ -40,17 +40,21 @@ def ask_doubt_endpoint():
         return jsonify({"success": False, "error": "Question is required"}), 400
 
     try:
+        logger.info(f"Processing doubt: {question}")
         result = doubt_solver_service.ask_doubt(question)
+        logger.info(f"Doubt result: {result}")
         
         # Always return 200 — success field indicates actual result
         if result.get("success"):
             return jsonify(result), 200
         else:
-            return jsonify(result), 422
+            # Return 200 with error in response body instead of 422
+            # This allows frontend to properly parse error messages
+            return jsonify(result), 200
     
     except Exception as exc:
         logger.exception("Doubt solver endpoint error")
         return jsonify({
             "success": False,
-            "error": "Internal server error"
+            "error": f"Internal server error: {str(exc)}"
         }), 500
