@@ -44,6 +44,7 @@ def create_app():
     from .routes import insights as insights_routes
     from .routes import playlist as playlist_routes
     from .routes import doubt_solver as doubt_solver_routes
+    from .routes import prep_plan as prep_plan_routes
 
     app.register_blueprint(interview.bp)
     app.register_blueprint(feedback.bp)
@@ -53,6 +54,7 @@ def create_app():
     app.register_blueprint(insights_routes.bp)
     app.register_blueprint(playlist_routes.bp)
     app.register_blueprint(doubt_solver_routes.bp)
+    app.register_blueprint(prep_plan_routes.bp)
 
     # ── Create tables + seed on first run ───────────────────────────────
     with app.app_context():
@@ -61,6 +63,10 @@ def create_app():
             InterviewExperience,
             PreparationStrategy,
             seed_db,
+        )
+        from .models.prep_plan_models import (  # noqa: F401
+            CompanyPattern,
+            TopicResourceCache,
         )
         db.create_all()
         seed_db()

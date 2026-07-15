@@ -132,3 +132,111 @@ def search_parallel(query: str) -> dict[str, list[dict[str, Any]]]:
                 results[key] = []
 
     return results
+
+
+# ---------------------------------------------------------------------------
+# Prep Plan — company pattern discovery searches (4 angles in parallel)
+# ---------------------------------------------------------------------------
+
+def search_company_pattern(company: str) -> list[dict[str, Any]]:
+    """
+    Run 4 parallel Tavily searches covering different angles of a company's
+    interview/placement process. Returns a deduplicated merged list.
+    """
+    if not Config.TAVILY_API_KEY:
+        logger.error("TAVILY_API_KEY not configured")
+        return []
+
+    queries = [
+        f"{company} placement interview process rounds freshers campus",
+        f"{company} coding round topics questions online assessment",
+        f"{company} aptitude test pattern logical reasoning",
+        f"{company} technical interview questions experience",
+    ]
+
+    all_results: list[dict[str, Any]] = []
+    seen_urls: set[str] = set()
+
+    def _run(q: str) -> list[dict[str, Any]]:
+        try:
+            resp = requests.post(
+                f"{TAVILY_API_BASE}/search",
+                json={
+                    "api_key": Config.TAVILY_API_KEY,
+                    "query": q,
+                    "topic": "general",
+                    "max_results": 6,
+                    "include_sources": True,
+                },
+                timeout=12,
+            )
+            resp.raise_for_status()
+            return resp.json().get("results", [])
+        except Exception as e:
+            logger.error(f"Company pattern search failed for '{q}': {e}")
+            return []
+
+    with ThreadPoolExecutor(max_workers=4) as ex:
+        futures = {ex.submit(_run, q): q for q in queries}
+        for future in as_completed(futures):
+            for item in future.result():
+                url = item.get("url", "")
+                if url and url not in seen_urls:
+                    seen_urls.add(url)
+                    all_results.append(item)
+
+    logger.info(f"Company pattern search for '{company}': {len(all_results)} unique results")
+    return all_results
+
+
+# ---------------------------------------------------------------------------
+# Prep Plan — per-topic resource searches (3 angles in parallel)
+# ---------------------------------------------------------------------------
+
+def search_topic_resources(topic: str) -> list[dict[str, Any]]:
+    """
+    Run 3 parallel Tavily searches to find the best resources for a prep topic.
+    Returns a deduplicated merged list.
+    """
+    if not Config.TAVILY_API_KEY:
+        return []
+
+    queries = [
+        f"{topic} tutorial explained for beginners programming",
+        f"{topic} leetcode geeksforgeeks problems practice",
+        f"{topic} youtube tutorial video explained",
+    ]
+
+    all_results: list[dict[str, Any]] = []
+    seen_urls: set[str] = set()
+
+    def _run(q: str) -> list[dict[str, Any]]:
+        try:
+            resp = requests.post(
+                f"{TAVILY_API_BASE}/search",
+                json={
+                    "api_key": Config.TAVILY_API_KEY,
+                    "query": q,
+                    "topic": "general",
+                    "max_results": 5,
+                    "include_sources": True,
+                },
+                timeout=12,
+            )
+            resp.raise_for_status()
+            return resp.json().get("results", [])
+        except Exception as e:
+            logger.error(f"Topic resource search failed for '{q}': {e}")
+            return []
+
+    with ThreadPoolExecutor(max_workers=3) as ex:
+        futures = {ex.submit(_run, q): q for q in queries}
+        for future in as_completed(futures):
+            for item in future.result():
+                url = item.get("url", "")
+                if url and url not in seen_urls:
+                    seen_urls.add(url)
+                    all_results.append(item)
+
+    logger.info(f"Topic resource search for '{topic}': {len(all_results)} unique results")
+    return all_results

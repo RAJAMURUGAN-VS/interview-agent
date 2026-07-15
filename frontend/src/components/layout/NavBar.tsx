@@ -10,6 +10,7 @@ const TABS = [
   { to: '/insights',  icon: 'fas fa-lightbulb',       label: 'Insights'  },
   { to: '/doubt-solver', icon: 'fas fa-brain',        label: 'Doubt Solver' },
   { to: '/playlist',  icon: 'fas fa-route',           label: 'Playlist'  },
+  { to: '/prep-plan', icon: 'fas fa-calendar-check',  label: 'Prep Plan' },
 ];
 
 

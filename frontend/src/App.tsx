@@ -9,6 +9,7 @@ import CodeFillPage from './components/codefill/CodeFillPage';
 import InsightsPage from './components/insights/InsightsPage';
 import PlaylistPage from './components/playlist/PlaylistPage';
 import DoubtSolverPage from './components/doubtsolver/DoubtSolverPage';
+import PrepPlanPage from './components/prepplan/PrepPlanPage';
 
 export default function App() {
   return (
@@ -48,6 +49,9 @@ export default function App() {
 
             {/* Doubt Solver route */}
             <Route path="/doubt-solver" element={<DoubtSolverPage />} />
+
+            {/* Prep Plan route */}
+            <Route path="/prep-plan" element={<PrepPlanPage />} />
 
             {/* Fallback */}
             <Route path="*" element={<Navigate to="/interview" replace />} />

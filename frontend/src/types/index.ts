@@ -499,3 +499,80 @@ export interface DoubtSolverResponse {
   github_examples?: ResourceLink[];
   error?: string;
 }
+
+// ── Prep Plan ─────────────────────────────────────────
+
+export type PrepPlanPhase      = 'setup' | 'discovering' | 'building' | 'plan' | 'error';
+export type PrepDifficultyTier = 'Easy' | 'Easy-Medium' | 'Medium' | 'Medium-High' | 'High';
+export type PrepConfidence     = 'high' | 'medium' | 'low';
+export type ResourceType       = 'youtube' | 'article' | 'practice' | 'github' | 'docs';
+
+export interface PrepRound {
+  order:          number;
+  name:           string;
+  testsAptitude:  boolean;
+  description:    string;
+}
+
+export interface PrepTopicWeight {
+  topic:  string;
+  weight: number;
+}
+
+export interface PrepCompanyPattern {
+  companyName:    string;
+  displayName:    string;
+  discoveredAt:   string;
+  rounds:         PrepRound[];
+  topicWeights:   PrepTopicWeight[];
+  testsAptitude:  boolean;
+  difficultyTier: PrepDifficultyTier;
+  formatNotes:    string;
+  confidence:     PrepConfidence;
+  sourceCount:    number;
+  sourceType:     string;
+}
+
+export interface ResourceLink {
+  type:        ResourceType;
+  title:       string;
+  url:         string;
+  description: string;
+}
+
+export interface PrepDay {
+  dayNumber:        number;
+  isReview:         boolean;
+  topic:            string;
+  topicWeight:      number;
+  // Structured day content (replaces the old single "explanation" string)
+  conceptsToMaster: string[];
+  practiceTasks:    string[];
+  estimatedHours:   number;
+  resources:        ResourceLink[];
+}
+
+export interface PrepPlan {
+  company:  PrepCompanyPattern;
+  days:     number;
+  timeline: PrepDay[];
+}
+
+// API shapes
+export interface PrepPlanGenerateResponse {
+  success:   boolean;
+  company?:  PrepCompanyPattern;
+  days?:     number;
+  timeline?: PrepDay[];
+  error?:    string;
+}
+
+export interface PrepPlanStatusResponse {
+  cached:      boolean;
+  confidence:  PrepConfidence | null;
+  displayName: string | null;
+}
+
+export interface PrepPlanCachedCompaniesResponse {
+  companies: string[];
+}
