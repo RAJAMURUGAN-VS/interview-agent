@@ -40,3 +40,24 @@ export async function getCachedCompanies(): Promise<PrepPlanCachedCompaniesRespo
   const res = await fetch(`${BASE}/prep-plan/cached-companies`);
   return res.json();
 }
+
+// ---------------------------------------------------------------------------
+// POST /prep-plan/assess
+// ---------------------------------------------------------------------------
+import type { PrepAssessmentRequest, PrepAssessmentResponse } from '../types';
+
+export async function generatePrepAssessment(
+  params: PrepAssessmentRequest
+): Promise<PrepAssessmentResponse> {
+  const res = await fetch(`${BASE}/prep-plan/assess`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({
+      company:       params.company,
+      topic:         params.topic,
+      difficulty:    params.difficulty,
+      questionCount: params.questionCount,
+    }),
+  });
+  return res.json();
+}

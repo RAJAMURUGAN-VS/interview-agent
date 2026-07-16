@@ -1,15 +1,17 @@
-import type { PrepPlan, PrepDay, PrepConfidence } from '../../types';
+import type { PrepPlan, PrepDay, PrepConfidence, PrepDayScore } from '../../types';
 import DayCard          from './DayCard';
 import TopicCard        from './TopicCard';
 import ReviewDayBanner  from './ReviewDayBanner';
 import ConfidenceBanner from './ConfidenceBanner';
 
 interface PlanTimelineProps {
-  plan:            PrepPlan;
-  activeDayIndex:  number;
-  onSelectDay:     (idx: number) => void;
-  onReset:         () => void;
-  confidence:      PrepConfidence | null;
+  plan:             PrepPlan;
+  activeDayIndex:   number;
+  dayScores:        Record<number, number>;   // dayNumber → percentage
+  onSelectDay:      (idx: number) => void;
+  onReset:          () => void;
+  onAssessmentComplete: (result: Omit<PrepDayScore, 'completedAt'>) => void;
+  confidence:       PrepConfidence | null;
 }
 
 const TIER_COLOR: Record<string, string> = {
@@ -21,19 +23,20 @@ const TIER_COLOR: Record<string, string> = {
 };
 
 export default function PlanTimeline({
-  plan, activeDayIndex, onSelectDay, onReset, confidence,
+  plan, activeDayIndex, dayScores, onSelectDay,
+  onReset, onAssessmentComplete, confidence,
 }: PlanTimelineProps) {
   const { company, timeline } = plan;
   const activeDay: PrepDay    = timeline[activeDayIndex];
-
-  const tierColor = TIER_COLOR[company.difficultyTier] ?? 'text-[#8b8ba8]';
-  const reviewDays   = timeline.filter((d) => d.isReview).length;
-  const contentDays  = timeline.length - reviewDays;
+  const tierColor             = TIER_COLOR[company.difficultyTier] ?? 'text-[#8b8ba8]';
+  const reviewDays            = timeline.filter(d => d.isReview).length;
+  const contentDays           = timeline.length - reviewDays;
+  const completedDays         = Object.keys(dayScores).length;
 
   return (
     <div className="animate-fade-in space-y-5">
 
-      {/* Company header */}
+      {/* ── Company header ──────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <div className="flex items-center gap-2 mb-1">
@@ -61,19 +64,23 @@ export default function PlanTimeline({
                 <i className="fas fa-brain mr-1" />Aptitude included
               </span>
             )}
+            {completedDays > 0 && (
+              <span className="text-[#4f46e5]">
+                <i className="fas fa-circle-check mr-1" />{completedDays} assessed
+              </span>
+            )}
           </div>
         </div>
-        <button
-          onClick={onReset}
+
+        <button onClick={onReset}
           className="flex items-center gap-1.5 text-xs text-[#8b8ba8]
             hover:text-[#f0f0ff] border border-[#2a2a3d] hover:border-[#4f46e5]/40
-            rounded-xl px-3 py-2 transition-all"
-        >
+            rounded-xl px-3 py-2 transition-all">
           <i className="fas fa-arrow-left text-[10px]" />New Plan
         </button>
       </div>
 
-      {/* Confidence banner (only for low) */}
+      {/* Confidence banner */}
       {confidence === 'low' && (
         <ConfidenceBanner
           confidence={company.confidence as PrepConfidence}
@@ -91,17 +98,18 @@ export default function PlanTimeline({
         </div>
       )}
 
-      {/* Two-column layout: day list + active day detail */}
+      {/* ── Two-column layout ────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-4 items-start">
 
         {/* Day list sidebar */}
         <div className="lg:sticky lg:top-4 space-y-1.5 max-h-[70vh]
-          overflow-y-auto pr-1 scrollbar-thin">
+          overflow-y-auto pr-1">
           {timeline.map((day, idx) => (
             <DayCard
               key={day.dayNumber}
               day={day}
               isActive={idx === activeDayIndex}
+              score={dayScores[day.dayNumber] ?? null}
               onClick={() => onSelectDay(idx)}
             />
           ))}
@@ -111,7 +119,13 @@ export default function PlanTimeline({
         <div className="card animate-fade-in" key={activeDayIndex}>
           {activeDay.isReview
             ? <ReviewDayBanner dayNumber={activeDay.dayNumber} />
-            : <TopicCard day={activeDay} />
+            : (
+              <TopicCard
+                day={activeDay}
+                company={company.displayName}
+                onComplete={onAssessmentComplete}
+              />
+            )
           }
         </div>
 

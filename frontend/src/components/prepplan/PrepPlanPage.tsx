@@ -73,8 +73,10 @@ export default function PrepPlanPage() {
           <PlanTimeline
             plan={pp.plan}
             activeDayIndex={pp.activeDayIndex}
+            dayScores={pp.dayScores}
             onSelectDay={pp.setActiveDayIndex}
             onReset={pp.handleReset}
+            onAssessmentComplete={pp.handleAssessmentComplete}
             confidence={pp.companyConfidence}
           />
         )}

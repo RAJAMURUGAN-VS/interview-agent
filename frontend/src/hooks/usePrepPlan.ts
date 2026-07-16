@@ -4,6 +4,7 @@ import type {
   PrepPlan,
   PrepConfidence,
   PrepDay,
+  PrepDayScore,
 } from '../types';
 import {
   generatePrepPlan,
@@ -51,6 +52,9 @@ export function usePrepPlan() {
   const [companyConfidence, setCompanyConfidence] = useState<PrepConfidence | null>(null);
   const [activeDayIndex, setActiveDayIndex]       = useState(0);
   const [error, setError]                         = useState<string | null>(null);
+
+  // ── Assessment scores — dayNumber → percentage ────────────────────────────
+  const [dayScores, setDayScores] = useState<Record<number, number>>({});
 
   // ── Load cached company suggestions on mount ─────────────────────────────
   useEffect(() => {
@@ -162,6 +166,17 @@ export function usePrepPlan() {
     }
   }, [companyInput, days, startLoadingCycle, stopLoadingCycle]);
 
+  // ── Assessment complete handler ──────────────────────────────────────────
+  const handleAssessmentComplete = useCallback(
+    (result: Omit<PrepDayScore, 'completedAt'>) => {
+      setDayScores((prev) => ({
+        ...prev,
+        [result.dayNumber]: result.percentage,
+      }));
+    },
+    []
+  );
+
   // ── Reset to setup ───────────────────────────────────────────────────────
   const handleReset = useCallback(() => {
     stopLoadingCycle();
@@ -172,6 +187,7 @@ export function usePrepPlan() {
     setIsCached(null);
     setCompanyInput('');
     setDays(10);
+    setDayScores({});
     setPhase('setup');
   }, [stopLoadingCycle]);
 
@@ -199,6 +215,7 @@ export function usePrepPlan() {
     activeDay,
     activeDayIndex, setActiveDayIndex,
     companyConfidence,
+    dayScores,
 
     // error
     error,
@@ -206,5 +223,6 @@ export function usePrepPlan() {
     // actions
     handleGenerate,
     handleReset,
+    handleAssessmentComplete,
   };
 }

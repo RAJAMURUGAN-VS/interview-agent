@@ -545,11 +545,46 @@ export interface PrepDay {
   isReview:         boolean;
   topic:            string;
   topicWeight:      number;
-  // Structured day content (replaces the old single "explanation" string)
   conceptsToMaster: string[];
   practiceTasks:    string[];
   estimatedHours:   number;
   resources:        ResourceLink[];
+  // Assessment config — derived from company difficulty tier during plan generation
+  assessmentConfig: PrepAssessmentConfig;
+}
+
+export interface PrepAssessmentConfig {
+  questionCount:    number;   // 5 | 10 | 15 | 20
+  difficulty:       PrepDifficultyTier;
+  estimatedMinutes: number;
+  questionType:     'mcq' | 'truefalse';
+}
+
+export interface PrepDayScore {
+  dayNumber:   number;
+  topic:       string;
+  score:       number;    // correct count
+  total:       number;
+  percentage:  number;    // 0–100
+  weakAreas:   string[];
+  completedAt: string;    // ISO
+}
+
+// API shapes
+export interface PrepAssessmentRequest {
+  company:       string;
+  topic:         string;
+  difficulty:    PrepDifficultyTier;
+  questionCount: number;
+}
+
+export interface PrepAssessmentResponse {
+  success:          boolean;
+  questions?:       McqQuestion[];
+  questionType?:    'mcq' | 'truefalse';
+  topic?:           string;
+  estimatedMinutes?: number;
+  error?:           string;
 }
 
 export interface PrepPlan {

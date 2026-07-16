@@ -15,11 +15,11 @@ show accurate loading messages. A future upgrade path is SSE streaming.
 
 import json
 import logging
-import math
 import re
 from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from flask import current_app
 from langchain.chat_models import init_chat_model
 
 from ..config import Config
@@ -234,66 +234,76 @@ def _build_timeline(pattern: dict, days: int) -> list[dict]:
 # Stage B — Per-topic resource assembly
 # ---------------------------------------------------------------------------
 
-def _get_topic_data(topic: str, company: str = "") -> dict:
+def _get_topic_data(topic: str, company: str = "", app=None) -> dict:
     """
     Return concepts_to_master, practice_tasks, estimated_hours, and resources
     for a single topic. Hits layer-2 cache first; runs Tavily + Sonar on miss.
+
+    `app` must be the Flask application instance — required when called from
+    a ThreadPoolExecutor worker, which runs outside the request context.
+    Each worker pushes its own app context so SQLAlchemy can reach the DB.
     """
-    cached = cache.get_topic_resources(topic)
-    if cached:
-        logger.info(f"TopicResourceCache hit for '{topic}'")
-        return cached.to_dict()
+    # Push an app context for this worker thread so SQLAlchemy works correctly
+    ctx = app.app_context() if app else None
+    if ctx:
+        ctx.push()
 
-    # ── Tavily search (Fix 3 — log confirms this is actually running) ────
-    logger.info(f"TopicResourceCache miss — running Tavily search for '{topic}'")
-    search_results = tavily_service.search_topic_resources(topic)
-    logger.info(f"Tavily returned {len(search_results)} results for '{topic}'")
-    formatted      = format_search_results_for_prompt(search_results)
-
-    # ── Sonar synthesis ──────────────────────────────────────────────────
     try:
-        prompt = TOPIC_SYNTHESIS_PROMPT.format(
-            company        = company or "a campus placement drive",
-            topic          = topic,
-            search_results = formatted,
+        cached = cache.get_topic_resources(topic)
+        if cached:
+            logger.info(f"TopicResourceCache hit for '{topic}'")
+            return cached.to_dict()
+
+        # ── Tavily search ────────────────────────────────────────────────
+        logger.info(f"TopicResourceCache miss — running Tavily search for '{topic}'")
+        search_results = tavily_service.search_topic_resources(topic)
+        logger.info(f"Tavily returned {len(search_results)} results for '{topic}'")
+        formatted      = format_search_results_for_prompt(search_results)
+
+        # ── Sonar synthesis ──────────────────────────────────────────────
+        try:
+            prompt = TOPIC_SYNTHESIS_PROMPT.format(
+                company        = company or "a campus placement drive",
+                topic          = topic,
+                search_results = formatted,
+            )
+            data = _call_sonar(prompt)
+
+            concepts  = data.get("concepts_to_master", [])
+            tasks     = data.get("practice_tasks", [])
+            est_hours = float(data.get("estimated_hours", 2.5))
+            resources = data.get("resources", [])
+
+            logger.info(
+                f"Sonar synthesis OK for '{topic}': "
+                f"{len(concepts)} concepts, {len(tasks)} tasks, {len(resources)} resources"
+            )
+        except Exception as exc:
+            logger.error(f"Topic synthesis failed for '{topic}': {exc}")
+            concepts  = [f"Core patterns in {topic}", "Time and space complexity trade-offs"]
+            tasks     = [
+                f"Solve 10 easy-level {topic} problems on LeetCode or GeeksforGeeks",
+                f"Read the GeeksforGeeks article on {topic} and reproduce one example by hand",
+            ]
+            est_hours = 2.5
+            resources = []
+
+        # ── Persist ──────────────────────────────────────────────────────
+        structured_blob = json.dumps({
+            "concepts_to_master": concepts,
+            "practice_tasks":     tasks,
+            "estimated_hours":    est_hours,
+        })
+        row = cache.save_topic_resources(
+            topic       = topic,
+            resources   = resources,
+            explanation = structured_blob,
         )
-        data = _call_sonar(prompt)
+        return row.to_dict()
 
-        concepts      = data.get("concepts_to_master", [])
-        tasks         = data.get("practice_tasks", [])
-        est_hours     = float(data.get("estimated_hours", 2.5))
-        resources     = data.get("resources", [])
-
-        logger.info(
-            f"Sonar synthesis OK for '{topic}': "
-            f"{len(concepts)} concepts, {len(tasks)} tasks, {len(resources)} resources"
-        )
-    except Exception as exc:
-        logger.error(f"Topic synthesis failed for '{topic}': {exc}")
-        # Structured fallback — never produces a vague restatement string
-        concepts  = [f"Core patterns in {topic}", "Time and space complexity trade-offs"]
-        tasks     = [
-            f"Solve 10 easy-level {topic} problems on LeetCode or GeeksforGeeks",
-            f"Read the GeeksforGeeks article on {topic} and reproduce one example by hand",
-        ]
-        est_hours = 2.5
-        resources = []
-
-    # ── Persist using explanation field to store structured JSON ─────────
-    # The DB stores explanation as TEXT; we encode the structured fields
-    # inside a JSON blob so we don't need a schema migration.
-    structured_blob = json.dumps({
-        "concepts_to_master": concepts,
-        "practice_tasks":     tasks,
-        "estimated_hours":    est_hours,
-    })
-
-    row = cache.save_topic_resources(
-        topic       = topic,
-        resources   = resources,
-        explanation = structured_blob,
-    )
-    return row.to_dict()
+    finally:
+        if ctx:
+            ctx.pop()
 
 
 # ---------------------------------------------------------------------------
@@ -342,9 +352,16 @@ def generate_prep_plan(company: str, days: int) -> dict:
         d["topic"] for d in timeline if not d["isReview"]
     ))
 
+    # Capture the Flask app instance HERE (inside the request context) so
+    # each worker thread can push its own app context via app.app_context().
+    flask_app = current_app._get_current_object()
+
     topic_data: dict[str, dict] = {}
     with ThreadPoolExecutor(max_workers=4) as ex:
-        futures = {ex.submit(_get_topic_data, t, company): t for t in unique_topics}
+        futures = {
+            ex.submit(_get_topic_data, t, company, flask_app): t
+            for t in unique_topics
+        }
         for future in as_completed(futures):
             t = futures[future]
             try:
@@ -362,6 +379,37 @@ def generate_prep_plan(company: str, days: int) -> dict:
                 }
 
     # ── Merge into timeline ───────────────────────────────────────────────
+    difficulty_tier = pattern.get("difficultyTier", "Medium")
+
+    # Assessment config lookup tables (mirror the route's _DIFFICULTY_COUNTS)
+    _q_count_map = {
+        "Easy":        5,
+        "Easy-Medium": 7,
+        "Medium":      10,
+        "Medium-High": 10,
+        "High":        15,
+    }
+    _aptitude_keywords = {
+        "aptitude", "verbal", "logical", "reasoning",
+        "quantitative", "quant", "english", "comprehension",
+    }
+
+    def _snap_count(n: int) -> int:
+        return min((5, 10, 15, 20), key=lambda x: abs(x - n))
+
+    def _assessment_config(topic: str) -> dict:
+        topic_lower  = topic.lower()
+        is_aptitude  = any(kw in topic_lower for kw in _aptitude_keywords)
+        q_count      = _snap_count(_q_count_map.get(difficulty_tier, 10))
+        q_type       = "truefalse" if is_aptitude else "mcq"
+        mins_per_q   = 1.5 if is_aptitude else 3
+        return {
+            "questionCount":    q_count,
+            "difficulty":       difficulty_tier,
+            "estimatedMinutes": round(q_count * mins_per_q),
+            "questionType":     q_type,
+        }
+
     for day in timeline:
         if day["isReview"]:
             day["conceptsToMaster"] = ["Review all topics covered this week"]
@@ -372,10 +420,15 @@ def generate_prep_plan(company: str, days: int) -> dict:
             ]
             day["estimatedHours"]   = 3.0
             day["resources"]        = []
+            day["assessmentConfig"] = {
+                "questionCount":    10,
+                "difficulty":       difficulty_tier,
+                "estimatedMinutes": 20,
+                "questionType":     "mcq",
+            }
         else:
             td  = topic_data.get(day["topic"], {})
             raw = td.get("explanation", "{}")
-            # Decode the structured blob stored in the explanation field
             try:
                 structured = json.loads(raw) if isinstance(raw, str) else {}
             except (json.JSONDecodeError, TypeError):
@@ -385,6 +438,7 @@ def generate_prep_plan(company: str, days: int) -> dict:
             day["practiceTasks"]    = structured.get("practice_tasks", [])
             day["estimatedHours"]   = structured.get("estimated_hours", 2.5)
             day["resources"]        = td.get("resources", [])
+            day["assessmentConfig"] = _assessment_config(day["topic"])
 
     return {
         "success":  True,
