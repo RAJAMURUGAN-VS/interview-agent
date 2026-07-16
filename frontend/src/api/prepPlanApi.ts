@@ -53,10 +53,12 @@ export async function generatePrepAssessment(
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify({
-      company:       params.company,
-      topic:         params.topic,
-      difficulty:    params.difficulty,
-      questionCount: params.questionCount,
+      company:          params.company,
+      topic:            params.topic,
+      difficulty:       params.difficulty,
+      questionCount:    params.questionCount,
+      conceptsToMaster: params.conceptsToMaster,
+      formatNotes:      params.formatNotes,
     }),
   });
   return res.json();

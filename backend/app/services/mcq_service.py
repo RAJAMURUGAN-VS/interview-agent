@@ -307,14 +307,37 @@ def generate_questions(
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError:
-        # Fallback repair: replace single quotes with double quotes
+        # First fallback: try repairing single-quote JSON
         try:
-            # simple replacement for single quotes (e.g. {'id': 'q1'} -> {"id": "q1"})
-            # Note: This is a fallback and shouldn't run often because of JSON mode.
             repaired = raw.replace("'", '"')
             parsed = json.loads(repaired)
         except Exception:
-            raise ValueError(f"LLM returned invalid JSON: {raw[:200]}")
+            # Second fallback: the response was truncated mid-JSON (token limit).
+            # Extract however many complete question objects were received rather
+            # than failing entirely. Each complete object ends with "}".
+            recovered = []
+            # Find every complete {...} block in the raw output
+            depth = 0
+            obj_start = None
+            for i, ch in enumerate(raw):
+                if ch == '{':
+                    if depth == 0:
+                        obj_start = i
+                    depth += 1
+                elif ch == '}':
+                    depth -= 1
+                    if depth == 0 and obj_start is not None:
+                        try:
+                            obj = json.loads(raw[obj_start:i + 1])
+                            recovered.append(obj)
+                        except Exception:
+                            pass
+                        obj_start = None
+
+            if recovered:
+                parsed = recovered
+            else:
+                raise ValueError(f"LLM returned invalid JSON: {raw[:200]}")
 
     if isinstance(parsed, dict):
         # Look for any list inside the dict (e.g. "questions", "quiz", etc.)

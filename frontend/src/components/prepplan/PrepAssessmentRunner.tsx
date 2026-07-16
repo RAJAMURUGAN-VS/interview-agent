@@ -24,6 +24,8 @@ interface Props {
   topic:            string;
   dayNumber:        number;
   assessmentConfig: PrepAssessmentConfig;
+  conceptsToMaster: string[];   // specific sub-skills to seed question generation
+  formatNotes:      string;     // company format grounding
   onComplete:       (result: Omit<PrepDayScore, 'completedAt'>) => void;
   onClose:          () => void;
 }
@@ -49,7 +51,9 @@ function DifficultyStars({ tier }: { tier: string }) {
 // ── Main component ───────────────────────────────────────────────────────────
 
 export default function PrepAssessmentRunner({
-  company, topic, dayNumber, assessmentConfig, onComplete, onClose,
+  company, topic, dayNumber, assessmentConfig,
+  conceptsToMaster, formatNotes,
+  onComplete, onClose,
 }: Props) {
   const [phase, setPhase]             = useState<RunnerPhase>('idle');
   const [questions, setQuestions]     = useState<McqQuestion[]>([]);
@@ -70,7 +74,12 @@ export default function PrepAssessmentRunner({
     setErrorMsg('');
     try {
       const res = await generatePrepAssessment({
-        company, topic, difficulty, questionCount,
+        company,
+        topic,
+        difficulty,
+        questionCount,
+        conceptsToMaster,
+        formatNotes,
       });
       if (!res.success || !res.questions?.length) {
         setErrorMsg(res.error ?? 'Could not generate questions. Try again.');
@@ -94,13 +103,14 @@ export default function PrepAssessmentRunner({
   const handleSelect = useCallback((label: string) => {
     if (isAnswered || !q) return;
     setSelected(label);
-    setAnswers(prev => [...prev, {
+    const newAnswer: McqAnswer = {
       question_id:    q.id,
       selected_label: label,
       fill_input:     '',
       is_correct:     label === q.correct_label,
       status:         'answered',
-    }]);
+    };
+    setAnswers(prev => [...prev, newAnswer]);
     setIsAnswered(true);
   }, [isAnswered, q]);
 
@@ -108,30 +118,24 @@ export default function PrepAssessmentRunner({
   const handleNext = useCallback(() => {
     if (!q) return;
 
-    // For fillup type — record answer on Next
-    if (questionType === 'truefalse' && !isAnswered) {
-      const label = selected ?? '';
-      const correct = label === q.correct_label;
-      setAnswers(prev => [...prev, {
-        question_id:    q.id,
-        selected_label: label,
-        fill_input:     fillInput,
-        is_correct:     correct,
-        status:         'answered',
-      }]);
-    }
-
     if (isLast) {
-      // Calculate results
-      const finalAnswers = answers.length < questions.length
-        ? [...answers]   // last answer already recorded via handleSelect
-        : answers;
+      // Build the complete answer list INCLUDING the current question.
+      // We can't rely on the `answers` state here because React hasn't flushed
+      // the setState from handleSelect yet — so we reconstruct it directly.
+      const currentAnswer: McqAnswer = {
+        question_id:    q.id,
+        selected_label: selected ?? '',
+        fill_input:     '',
+        is_correct:     (selected ?? '') === q.correct_label,
+        status:         'answered',
+      };
+      // answers already contains q1..q(n-1); add the current question's answer
+      const finalAnswers = [...answers, currentAnswer];
 
       const score      = finalAnswers.filter(a => a.is_correct).length;
       const total      = questions.length;
       const percentage = Math.round((score / total) * 100);
 
-      // Collect weak areas from wrong answers
       const weakAreas = finalAnswers
         .filter(a => !a.is_correct)
         .map(a => {
@@ -141,16 +145,20 @@ export default function PrepAssessmentRunner({
         .filter(Boolean)
         .slice(0, 3);
 
-      onComplete({ dayNumber, topic, score, total, percentage, weakAreas });
+      // Persist the full answer list so the results screen has it
+      setAnswers(finalAnswers);
+
+      // Show results FIRST — then call onComplete so the parent doesn't
+      // close the runner before the results screen renders
       setPhase('results');
+      onComplete({ dayNumber, topic, score, total, percentage, weakAreas });
     } else {
       setCurrent(i => i + 1);
       setSelected(null);
       setIsAnswered(false);
       setFillInput('');
     }
-  }, [q, isLast, isAnswered, questionType, selected, fillInput,
-      answers, questions, dayNumber, topic, onComplete]);
+  }, [q, isLast, selected, answers, questions, dayNumber, topic, onComplete]);
 
   const scoreForDisplay = answers.filter(a => a.is_correct).length;
 

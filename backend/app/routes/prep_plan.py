@@ -5,11 +5,13 @@ Endpoints:
   POST /prep-plan/generate           { companyName, days } → full PrepPlan
   GET  /prep-plan/company-status     ?company=  → cache status (fast check)
   GET  /prep-plan/cached-companies   → list of all cached company names
-  POST /prep-plan/assess             { company, topic, difficulty, questionCount }
+  POST /prep-plan/assess             { company, topic, difficulty, questionCount,
+                                       conceptsToMaster, formatNotes }
                                      → MCQ questions ready to run inline
 """
 
 import logging
+import random
 from flask import Blueprint, jsonify, request
 
 from ..services import prep_plan_service
@@ -133,20 +135,50 @@ def cached_companies():
 # POST /prep-plan/assess
 # ---------------------------------------------------------------------------
 
-# Map frontend difficulty labels to MCQ question counts that make sense
 _DIFFICULTY_COUNTS = {
     "Easy":        5,
-    "Easy-Medium": 7,
-    "Medium":      10,
+    "Easy-Medium": 5,
+    "Medium":      5,
     "Medium-High": 10,
-    "High":        15,
+    "High":        10,
 }
 
-# Topics that are aptitude/verbal — use truefalse instead of code-style MCQ
-_APTITUDE_TOPIC_KEYWORDS = {
-    "aptitude", "verbal", "logical", "reasoning", "quantitative",
-    "quant", "english", "comprehension",
-}
+
+def _build_topic_seed(
+    topic: str,
+    concepts: list[str],
+    company: str,
+    difficulty: str,
+    format_notes: str,
+) -> str:
+    """
+    Build a rich, specific topic string for mcq_service.generate_questions().
+
+    Instead of the broad category label (e.g. "Aptitude (Quantitative…)"),
+    we sample from concepts_to_master so the LLM receives concrete patterns
+    like "Speed and distance, Profit and loss, Ratio and proportion" and
+    generates actual solvable problems — not facts about the topic.
+
+    A context_hint line at the end grounds the style in the company's
+    known format and difficulty level.
+    """
+    # Use concepts if available; fall back to the raw topic name
+    if concepts:
+        # Sample up to 5 concepts so a 10-question set spans multiple patterns
+        sampled = random.sample(concepts, min(5, len(concepts)))
+        seed = ", ".join(sampled)
+    else:
+        seed = topic
+
+    # Company + difficulty grounding line
+    hint_parts = [f"Style these as {company}'s actual assessment would ask them" if company else ""]
+    if difficulty and difficulty != "Medium":
+        hint_parts.append(f"Difficulty level: {difficulty}")
+    if format_notes:
+        hint_parts.append(format_notes.strip(". "))
+
+    hint = ". ".join(p for p in hint_parts if p)
+    return f"{seed}. {hint}" if hint else seed
 
 
 @bp.route("/assess", methods=["POST"])
@@ -154,59 +186,58 @@ def assess():
     """
     Generate an inline MCQ assessment for a single Prep Plan day.
 
-    Reuses the existing MCQ service (source_type='topic') — no new LLM
-    prompt needed. The topic is enriched with the company name so questions
-    are contextualised (e.g. "Arrays for TCS NQT" rather than generic arrays).
+    Uses source_type='topic' on the existing MCQ service — no new LLM prompt.
+    Seeds generation from conceptsToMaster (specific sub-skills) rather than
+    the broad topic label so questions require actual calculation/problem-solving.
+
+    Always uses 'mcq' question type — truefalse cannot represent solvable
+    problems (aptitude, DSA, or otherwise).
 
     Request JSON:
       {
-        "company":       str,   e.g. "TCS"
-        "topic":         str,   e.g. "Arrays & String Manipulation"
-        "difficulty":    str,   "Easy" | "Easy-Medium" | "Medium" | "Medium-High" | "High"
-        "questionCount": int    optional override (5 | 10 | 15 | 20), default from difficulty
+        "company":          str,    e.g. "TCS"
+        "topic":            str,    e.g. "Aptitude (Quantitative, Numerical...)"
+        "difficulty":       str,    "Easy" | "Easy-Medium" | "Medium" | "Medium-High" | "High"
+        "questionCount":    int,    optional override (5 | 10 | 15 | 20)
+        "conceptsToMaster": list,   specific sub-skills from the day's plan
+        "formatNotes":      str,    optional company-specific format note
       }
 
-    Response (success):
+    Response:
       {
         "success": true,
         "questions": [ ...McqQuestion objects... ],
-        "questionType": "mcq" | "truefalse",
+        "questionType": "mcq",
         "topic": str,
         "estimatedMinutes": int
       }
     """
     data = request.get_json(force=True, silent=True) or {}
 
-    company    = str(data.get("company",    "")).strip()
-    topic      = str(data.get("topic",      "")).strip()
-    difficulty = str(data.get("difficulty", "Medium")).strip()
+    company      = str(data.get("company",    "")).strip()
+    topic        = str(data.get("topic",      "")).strip()
+    difficulty   = str(data.get("difficulty", "Medium")).strip()
+    concepts     = data.get("conceptsToMaster") or []
+    format_notes = str(data.get("formatNotes", "")).strip()
 
     if not topic:
         return jsonify({"success": False, "error": "topic is required."}), 400
 
-    # Determine question count
+    # Determine question count — snap to allowed set {5, 10, 15, 20}
     try:
         q_count = int(data.get("questionCount") or _DIFFICULTY_COUNTS.get(difficulty, 10))
     except (TypeError, ValueError):
         q_count = 10
     if q_count not in (5, 10, 15, 20):
-        # Snap to nearest allowed value
         q_count = min((5, 10, 15, 20), key=lambda x: abs(x - q_count))
 
-    # Decide question type: aptitude/verbal topics → truefalse works well;
-    # coding topics → standard MCQ
-    topic_lower    = topic.lower()
-    is_aptitude    = any(kw in topic_lower for kw in _APTITUDE_TOPIC_KEYWORDS)
-    question_type  = "truefalse" if is_aptitude else "mcq"
+    # Always MCQ — truefalse cannot represent computation-based problems
+    question_type = "mcq"
 
-    # Build a rich topic hint that gives the LLM company context
-    enriched_topic = (
-        f"{topic} (as tested by {company})" if company else topic
-    )
+    # Build a specific, concept-grounded topic seed (Fix 2 + 4)
+    enriched_topic = _build_topic_seed(topic, concepts, company, difficulty, format_notes)
 
     try:
-        # Reuse mcq_service.generate_questions() with source_type='topic'
-        # content="" is correct for topic mode — the service uses TOPIC_ONLY_PREFIX
         questions = generate_questions(
             content        = "",
             question_count = q_count,
@@ -215,16 +246,12 @@ def assess():
             source_type    = "topic",
         )
 
-        # Estimate ~3 min/question for MCQ, ~1.5 min for truefalse
-        mins_per_q     = 1.5 if is_aptitude else 3
-        estimated_mins = round(q_count * mins_per_q)
-
         return jsonify({
             "success":          True,
             "questions":        questions,
             "questionType":     question_type,
             "topic":            topic,
-            "estimatedMinutes": estimated_mins,
+            "estimatedMinutes": q_count * 3,   # ~3 min per MCQ
         }), 200
 
     except Exception as exc:

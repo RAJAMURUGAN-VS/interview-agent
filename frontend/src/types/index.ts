@@ -572,10 +572,12 @@ export interface PrepDayScore {
 
 // API shapes
 export interface PrepAssessmentRequest {
-  company:       string;
-  topic:         string;
-  difficulty:    PrepDifficultyTier;
-  questionCount: number;
+  company:          string;
+  topic:            string;
+  difficulty:       PrepDifficultyTier;
+  questionCount:    number;
+  conceptsToMaster: string[];   // seeded into question generation for specificity
+  formatNotes:      string;     // company-specific format grounding
 }
 
 export interface PrepAssessmentResponse {

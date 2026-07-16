@@ -13,12 +13,13 @@ import ResourceChip          from './ResourceChip';
 import PrepAssessmentRunner  from './PrepAssessmentRunner';
 
 interface TopicCardProps {
-  day:       PrepDay;
-  company:   string;
-  onComplete: (result: Omit<PrepDayScore, 'completedAt'>) => void;
+  day:         PrepDay;
+  company:     string;
+  formatNotes: string;
+  onComplete:  (result: Omit<PrepDayScore, 'completedAt'>) => void;
 }
 
-export default function TopicCard({ day, company, onComplete }: TopicCardProps) {
+export default function TopicCard({ day, company, formatNotes, onComplete }: TopicCardProps) {
   const [assessmentOpen, setAssessmentOpen] = useState(false);
 
   const youtubeLinks  = day.resources.filter(r => r.type === 'youtube');
@@ -72,9 +73,13 @@ export default function TopicCard({ day, company, onComplete }: TopicCardProps) 
             topic={day.topic}
             dayNumber={day.dayNumber}
             assessmentConfig={day.assessmentConfig}
+            conceptsToMaster={day.conceptsToMaster}
+            formatNotes={formatNotes}
             onComplete={(result) => {
+              // Bubble score up to usePrepPlan — but do NOT close the runner here.
+              // The runner shows its results screen first; onClose fires when
+              // the student clicks "Done" inside the results view.
               onComplete(result);
-              setAssessmentOpen(false);
             }}
             onClose={() => setAssessmentOpen(false)}
           />
