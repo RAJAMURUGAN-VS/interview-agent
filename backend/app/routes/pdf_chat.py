@@ -84,8 +84,8 @@ def ask_text():
                         "error": "Vector store not found. Please re-upload the PDF."}), 404
 
     try:
-        context, source_docs = retrieve_context(vector_store, question, k=5)
-        answer = build_answer(thread_id, context, question, source_docs)
+        context, source_docs, relevance_score = retrieve_context(vector_store, question, k=5)
+        answer = build_answer(thread_id, context, question, source_docs, relevance_score)
         return jsonify({"success": True, "answer": answer})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
@@ -144,8 +144,8 @@ def ask_speech_answer():
         return jsonify({"success": False, "error": "Vector store not found."}), 404
 
     try:
-        context, source_docs = retrieve_context(vector_store, question, k=5)
-        answer = build_answer(thread_id, context, question, source_docs)
+        context, source_docs, relevance_score = retrieve_context(vector_store, question, k=5)
+        answer = build_answer(thread_id, context, question, source_docs, relevance_score)
         spoken_answer = answer.split("\n\n📄 Sources:")[0]
         import urllib.parse
         safe_answer = urllib.parse.quote(answer)
@@ -222,8 +222,8 @@ def ask_speech():
             os.unlink(temp_path)
 
     try:
-        context, source_docs = retrieve_context(vector_store, question, k=5)
-        answer = build_answer(thread_id, context, question, source_docs)
+        context, source_docs, relevance_score = retrieve_context(vector_store, question, k=5)
+        answer = build_answer(thread_id, context, question, source_docs, relevance_score)
         spoken_answer = answer.split("\n\n📄 Sources:")[0]
         import urllib.parse
         safe_answer = urllib.parse.quote(answer)

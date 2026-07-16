@@ -10,6 +10,7 @@ from ..utils.codefill_prompts import (
 _model = init_chat_model(
     "perplexity:sonar",
     api_key=Config.PERPLEXITY_API_KEY,
+    max_tokens=4000,   # cap output to prevent silent mid-JSON truncation
 )
 
 # Competitive Programming topic preset
@@ -46,6 +47,144 @@ def _strip_fences(raw: str) -> str:
     return raw.strip()
 
 
+def _repair_json(raw: str) -> str:
+    """
+    Attempt to repair common JSON issues from LLM output:
+    - Unescaped quotes in strings
+    - Unescaped newlines
+    - Single quotes instead of double quotes
+    """
+    # First attempt: try parsing as-is
+    try:
+        json.loads(raw)
+        return raw  # Already valid
+    except json.JSONDecodeError:
+        pass
+    
+    # Attempt 2: Replace single quotes with double quotes (risky but common)
+    attempt = raw.replace("'", '"')
+    try:
+        json.loads(attempt)
+        print("[JSON REPAIR] Fixed by replacing single quotes")
+        return attempt
+    except json.JSONDecodeError:
+        pass
+    
+    # Attempt 3: Escape unescaped quotes in the string content
+    # This is a more careful approach
+    import re
+    
+    # Find unescaped quotes within JSON string values
+    # Look for patterns like: "text with "unescaped" quotes"
+    def escape_unescaped_quotes(match):
+        content = match.group(1)
+        # Escape internal quotes that aren't already escaped
+        content = content.replace('\\"', '<<ESCAPED_QUOTE>>')  # Temporarily protect escaped quotes
+        content = content.replace('"', '\\"')  # Escape unescaped quotes
+        content = content.replace('<<ESCAPED_QUOTE>>', '\\"')  # Restore protected quotes
+        return f'"{content}"'
+    
+    attempt = re.sub(r'"([^"]*(?:\\.[^"]*)*)"', escape_unescaped_quotes, raw)
+    try:
+        json.loads(attempt)
+        print("[JSON REPAIR] Fixed by escaping internal quotes")
+        return attempt
+    except json.JSONDecodeError:
+        pass
+    
+    # Attempt 4: Remove or escape newlines within strings
+    attempt = raw.replace('\n', '\\n').replace('\r', '\\r')
+    try:
+        json.loads(attempt)
+        print("[JSON REPAIR] Fixed by escaping newlines")
+        return attempt
+    except json.JSONDecodeError:
+        pass
+    
+    print("[JSON REPAIR] Failed - returning original")
+    return raw
+
+
+def _recover_partial_json(raw: str) -> list:
+    """
+    When the LLM truncates mid-array, try to salvage all COMPLETE JSON
+    objects from the array before the cut-off point.
+
+    Strategy: scan for complete {...} blocks inside the outer [...] and
+    parse each one individually.  Returns a list of dicts (possibly empty).
+    """
+    import re
+    # Strip opening '[' and any trailing garbage after the last complete ']}'
+    text = raw.strip()
+    if text.startswith("["):
+        text = text[1:]
+
+    results = []
+    depth = 0
+    start = None
+
+    for i, ch in enumerate(text):
+        if ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0 and start is not None:
+                fragment = text[start:i + 1]
+                try:
+                    obj = json.loads(fragment)
+                    results.append(obj)
+                except json.JSONDecodeError:
+                    pass  # skip broken fragments
+                start = None
+
+    return results
+
+
+# How many questions to request per LLM call.
+# Smaller batches mean shorter responses that are less likely to be truncated.
+_BATCH_SIZE = 3
+
+
+def _call_llm_for_questions(language: str, category: str, topics: list, count: int) -> list:
+    """
+    Single LLM call for `count` questions.  Returns a (possibly empty) list.
+    Handles JSON repair and partial-truncation recovery automatically.
+    """
+    schema = CODEFILL_SCHEMA.format(language=language)
+    prompt = CODEFILL_GENERATION_PROMPT.format(
+        language=language,
+        category=category,
+        topics=", ".join(topics),
+        question_count=count,
+        schema=schema,
+    )
+
+    response = _model.invoke([{"role": "user", "content": prompt}])
+    raw = _strip_fences(response.content)
+
+    # --- attempt 1: full repair then parse ---
+    repaired = _repair_json(raw)
+    try:
+        questions = json.loads(repaired)
+        if isinstance(questions, list):
+            return questions
+    except json.JSONDecodeError:
+        pass
+
+    # --- attempt 2: partial-truncation recovery ---
+    print(f"[CODEFILL] Full parse failed, attempting partial recovery...")
+    recovered = _recover_partial_json(raw)
+    if recovered:
+        print(f"[CODEFILL] Recovered {len(recovered)} question(s) from truncated response")
+        return recovered
+
+    # --- give up: log and return empty ---
+    print(f"[CODEFILL ERROR] Could not parse response. First 300 chars: {raw[:300]}")
+    return []
+
+
 def generate_questions(
     language: str,
     category: str,
@@ -53,35 +192,43 @@ def generate_questions(
     question_count: int,
 ) -> list:
     """
-    Call LLM to generate code fill-in-the-blank questions.
-    Returns list of question dicts matching CODEFILL_SCHEMA.
+    Generate `question_count` questions by calling the LLM in small batches
+    of _BATCH_SIZE to avoid token-limit truncation of the JSON response.
     """
-    schema = CODEFILL_SCHEMA.format(language=language)
-    prompt = CODEFILL_GENERATION_PROMPT.format(
-        language=language,
-        category=category,
-        topics=", ".join(topics),
-        question_count=question_count,
-        schema=schema,
-    )
+    all_questions: list = []
+    remaining = question_count
+    topic_cycle = list(topics)  # rotate topics across batches
 
-    response = _model.invoke([{"role": "user", "content": prompt}])
-    raw = _strip_fences(response.content)
-    questions = json.loads(raw)
+    while remaining > 0:
+        batch_size = min(remaining, _BATCH_SIZE)
+        # Pick a rotating subset of topics so each batch covers different ground
+        batch_topics = topic_cycle[: max(1, len(topic_cycle))]
 
-    if not isinstance(questions, list):
-        raise ValueError("LLM did not return a JSON array")
+        print(f"[CODEFILL] Requesting batch of {batch_size} questions "
+              f"({question_count - remaining + batch_size}/{question_count} total)")
 
-    # Assign stable ids if LLM omitted them
-    for i, q in enumerate(questions):
-        if not q.get("id"):
-            q["id"] = f"q{i + 1}"
-        # Normalise blank ids
+        batch = _call_llm_for_questions(language, category, batch_topics, batch_size)
+        all_questions.extend(batch)
+        remaining -= batch_size
+
+        # Rotate topics so next batch picks different ones
+        if len(topic_cycle) > 1:
+            topic_cycle = topic_cycle[1:] + topic_cycle[:1]
+
+    if not all_questions:
+        raise ValueError(
+            "LLM returned no valid questions after all batches. "
+            "Please try again or select different topics."
+        )
+
+    # Re-assign sequential ids and normalise blanks
+    for i, q in enumerate(all_questions):
+        q["id"] = f"q{i + 1}"
         for j, blank in enumerate(q.get("blanks", [])):
             if not blank.get("id"):
                 blank["id"] = f"BLANK_{j}"
 
-    return questions
+    return all_questions[:question_count]  # trim any extras
 
 
 import re as _re
@@ -191,6 +338,22 @@ def generate_feedback(
         results_json=json.dumps(results, indent=2),
     )
 
-    response = _model.invoke([{"role": "user", "content": prompt}])
-    raw = _strip_fences(response.content)
-    return json.loads(raw)
+    try:
+        response = _model.invoke([{"role": "user", "content": prompt}])
+        raw = _strip_fences(response.content)
+        
+        # Attempt to repair JSON if needed
+        raw = _repair_json(raw)
+        
+        feedback = json.loads(raw)
+        return feedback
+    except json.JSONDecodeError as e:
+        print(f"[CODEFILL FEEDBACK ERROR] JSON parsing failed: {e}")
+        print(f"[CODEFILL FEEDBACK ERROR] Raw response (first 500 chars): {raw[:500]}")
+        # Return a safe fallback feedback
+        return {
+            "summary": "Feedback could not be generated due to processing error.",
+            "strengths": [],
+            "areas_to_improve": [],
+            "next_steps": "Try the quiz again or select different topics."
+        }
