@@ -13,6 +13,8 @@ export default function StreamingMarkdown({ content, isStreamingActive, onComple
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const contentRef = useRef(content);
   const onCompleteRef = useRef(onComplete);
+  const hasStreamedRef = useRef(false);  // ← NEW: track if this message has already streamed
+  const isStreamingRef = useRef(false);  // ← NEW: track if currently streaming
 
   useEffect(() => {
     contentRef.current = content;
@@ -23,11 +25,22 @@ export default function StreamingMarkdown({ content, isStreamingActive, onComple
   }, [onComplete]);
 
   useEffect(() => {
+    // If not streaming, just show all content without animation
     if (!isStreamingActive) {
+      setDisplayedText(content);
+      isStreamingRef.current = false;
+      return;
+    }
+
+    // If we've already streamed this message once, don't re-stream it
+    if (hasStreamedRef.current) {
       setDisplayedText(content);
       return;
     }
 
+    // Mark that we're now streaming this message
+    isStreamingRef.current = true;
+    hasStreamedRef.current = true;
     setDisplayedText('');
     let currentIdx = 0;
     const textToStream = content;
@@ -38,6 +51,7 @@ export default function StreamingMarkdown({ content, isStreamingActive, onComple
           clearInterval(intervalRef.current);
         }
         setDisplayedText(textToStream);
+        isStreamingRef.current = false;
         if (onCompleteRef.current) {
           onCompleteRef.current();
         }
@@ -62,7 +76,7 @@ export default function StreamingMarkdown({ content, isStreamingActive, onComple
       <ReactMarkdown remarkPlugins={[remarkGfm]}>
         {displayedText}
       </ReactMarkdown>
-      {isStreamingActive && displayedText.length < content.length && (
+      {isStreamingRef.current && displayedText.length < content.length && (
         <span className="streaming-cursor" aria-hidden="true" />
       )}
     </div>

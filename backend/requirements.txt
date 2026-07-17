@@ -12,7 +12,19 @@ langchain-community
 langchain-huggingface
 langchain-chroma
 chromadb
-pypdf
 sentence-transformers
 firecrawl-py
 youtube-transcript-api
+numpy<2.0
+tifffile<2025.0
+
+# PDF extraction — fast C-backed engine (replaces pypdf/PyPDFLoader)
+pymupdf
+
+# OCR for scanned / image-based PDF pages
+paddlepaddle
+paddleocr
+
+# Image processing (required by PaddleOCR)
+pillow
+opencv-python-headless

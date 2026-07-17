@@ -12,6 +12,7 @@ from ..services.rag_service import (
     clear_session,
     _cached_vector_stores,
     _session_threads,
+    CHROMA_PERSIST_DIR,
 )
 from ..services.stt_service import speech_to_text
 from ..services.tts_service import stream_audio
@@ -23,8 +24,8 @@ bp = Blueprint("pdf_chat", __name__)
 @bp.route("/pdf-chat/upload", methods=["POST"])
 def upload_pdf():
     """
-    Accept a PDF upload, build its vector store, create a LangGraph
-    session thread, and return the thread_id to the frontend.
+    Accept a PDF upload, build its vector store, create a session
+    thread, and return the thread_id to the frontend.
     """
     if "pdf" not in request.files:
         return jsonify({"success": False, "error": "No PDF file provided"}), 400
@@ -59,7 +60,7 @@ def upload_pdf():
 def ask_text():
     """
     Accept a text question and thread_id.
-    Retrieve context from the vector store and invoke the LangGraph agent.
+    Retrieve context from the vector store and invoke the RAG model.
     """
     data = request.json or {}
     thread_id = data.get("thread_id", "").strip()
@@ -162,9 +163,7 @@ def ask_speech_answer():
 
 @bp.route("/pdf-chat/tts", methods=["POST"])
 def text_to_speech():
-    """
-    Accept text and stream TTS audio chunks.
-    """
+    """Accept text and stream TTS audio chunks."""
     data = request.json or {}
     text = data.get("text", "").strip()
     if not text:
@@ -183,7 +182,7 @@ def text_to_speech():
 def ask_speech():
     """
     Accept an audio file and thread_id.
-    Transcribe (STT), retrieve context, invoke LangGraph agent, stream TTS.
+    Transcribe (STT), retrieve context, invoke RAG model, stream TTS.
     """
     if "audio" not in request.files:
         return jsonify({"success": False, "error": "No audio file provided"}), 400
@@ -246,7 +245,7 @@ def ask_speech():
 def delete_session():
     """
     Called when the user closes a PDF tab.
-    Clears the agent, vector store, and thread mapping from memory.
+    Clears the vector store and thread mapping from memory.
     """
     data = request.json or {}
     thread_id = data.get("thread_id", "").strip()
@@ -279,18 +278,14 @@ def session_from_hash():
     if not vector_store:
         # Try to reload from the persisted ChromaDB directory
         try:
+            import chromadb
             from langchain_chroma import Chroma
-            from langchain_huggingface import HuggingFaceEmbeddings
-
-            # Reuse the shared embeddings model from rag_service
             from ..services.rag_service import _embeddings
 
             collection_name = f"pdf_chat_{file_hash}"
-            persist_dir = "./chroma_pdf_db"
 
             # Check if the collection exists on disk
-            import chromadb
-            client = chromadb.PersistentClient(path=persist_dir)
+            client = chromadb.PersistentClient(path=CHROMA_PERSIST_DIR)
             existing = [c.name for c in client.list_collections()]
 
             if collection_name not in existing:
@@ -300,10 +295,11 @@ def session_from_hash():
                     "error": "collection-not-found",
                 }), 404
 
+            # Re-attach using the same client= pattern as rag_service
             vector_store = Chroma(
+                client=client,
                 collection_name=collection_name,
                 embedding_function=_embeddings,
-                persist_directory=persist_dir,
             )
             _cached_vector_stores[file_hash] = vector_store
             print(f"[session-from-hash] Reloaded collection {collection_name} from disk")
@@ -320,4 +316,3 @@ def session_from_hash():
         "thread_id": thread_id,
         "file_hash": file_hash,
     })
-

@@ -19,8 +19,8 @@ export function useInterview() {
   const [conversation, setConversation] = useState<InterviewMessage[]>([]);
   const [reportSaved, setReportSaved] = useState(false);
 
-  const { isRecording, recordedBlob, startRecording, stopRecording } = useMediaRecorder();
-  const { isSpeaking, playStream } = useAudioStream();
+  const { isRecording, recordedBlob, startRecording, stopRecording, clearRecording } = useMediaRecorder();
+  const { isSpeaking, playStream, repeatAudio, canRepeat } = useAudioStream();
   const store = useAppStore();
 
   const appendToConversation = useCallback((msg: InterviewMessage) => {
@@ -89,6 +89,11 @@ export function useInterview() {
       stopRecording();
       setRecordingStatus('Recording complete');
     }
+  }
+
+  function reRecord() {
+    clearRecording();
+    setRecordingStatus('Click to record again');
   }
 
   async function submitAnswer() {
@@ -194,6 +199,7 @@ export function useInterview() {
     isRecording,
     recordedBlob,
     isSpeaking,
+    canRepeat,
     handleSelectDepartment,
     toggleSubject,
     addCustomSubject,
@@ -201,6 +207,8 @@ export function useInterview() {
     setCustomSubjectInput,
     startInterview,
     toggleRecording,
+    reRecord,
+    repeatAudio,
     submitAnswer,
     endInterview,
     getFeedback,

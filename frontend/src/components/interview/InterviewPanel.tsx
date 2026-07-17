@@ -22,6 +22,7 @@ interface Props {
   isSpeaking: boolean;
   isRecording: boolean;
   recordedBlob: Blob | null;
+  canRepeat: boolean;
   feedbackData: FeedbackData | null;
   isFeedbackLoading: boolean;
   reportSaved: boolean;
@@ -32,6 +33,8 @@ interface Props {
   setCustomSubjectInput: (v: string) => void;
   startInterview: () => void;
   toggleRecording: () => void;
+  reRecord: () => void;
+  repeatAudio: () => void;
   submitAnswer: () => void;
   endInterview: () => void;
   getFeedback: () => void;
@@ -42,10 +45,10 @@ interface Props {
 export default function InterviewPanel(props: Props) {
   const {
     phase, selectedDeptKey, selectedSubjects, customSubjectInput, questionNumber, recordingStatus,
-    isSpeaking, isRecording, recordedBlob,
+    isSpeaking, isRecording, recordedBlob, canRepeat,
     feedbackData, isFeedbackLoading, reportSaved,
     handleSelectDepartment, toggleSubject, addCustomSubject, removeCustomSubject, setCustomSubjectInput,
-    startInterview, toggleRecording, submitAnswer, endInterview, getFeedback, resetInterview, handleSaveReport,
+    startInterview, toggleRecording, reRecord, repeatAudio, submitAnswer, endInterview, getFeedback, resetInterview, handleSaveReport,
   } = props;
 
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -141,6 +144,28 @@ export default function InterviewPanel(props: Props) {
         <div className="animate-fade-in">
           <SpeakingBubble visible={isSpeaking} />
 
+          {/* Repeat button — visible while AI is speaking or after it finishes */}
+          {(isSpeaking || canRepeat) && (
+            <div className="flex justify-end mb-3">
+              <button
+                onClick={repeatAudio}
+                disabled={isSpeaking}
+                title="Listen to the question again"
+                aria-label="Repeat question"
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
+                  border transition-all duration-200
+                  ${
+                    isSpeaking
+                      ? 'border-[#2a2a3d] text-[#4a4a6a] cursor-not-allowed opacity-50'
+                      : 'border-[#4f46e5]/50 text-[#a5b4fc] hover:border-[#4f46e5] hover:bg-[#4f46e5]/10 hover:text-[#f0f0ff] active:scale-95'
+                  }`}
+              >
+                <i className="fas fa-rotate-left text-[11px]" />
+                Repeat question
+              </button>
+            </div>
+          )}
+
           {!isSpeaking && (
             <div className="flex flex-col items-center gap-6 py-4">
               <RecordButton
@@ -155,8 +180,25 @@ export default function InterviewPanel(props: Props) {
               >
                 {recordingStatus}
               </p>
+
+              {/* Action buttons after recording */}
               {recordedBlob && !isRecording && (
-                <Button label="Submit Answer" onClick={submitAnswer} />
+                <div className="flex flex-col items-center gap-3 w-full">
+                  <Button label="Submit Answer" onClick={submitAnswer} />
+
+                  {/* Re-record button */}
+                  <button
+                    onClick={reRecord}
+                    aria-label="Re-record answer"
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium
+                      border border-[#2a2a3d] text-[#8b8ba8]
+                      hover:border-[#ef4444]/50 hover:text-[#f87171] hover:bg-[#ef4444]/5
+                      transition-all duration-200 active:scale-95"
+                  >
+                    <i className="fas fa-arrow-rotate-left text-[11px]" />
+                    Re-record answer
+                  </button>
+                </div>
               )}
             </div>
           )}

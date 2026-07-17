@@ -36,5 +36,9 @@ export function useMediaRecorder() {
     }
   }
 
-  return { isRecording, recordedBlob, startRecording, stopRecording };
+  function clearRecording() {
+    setRecordedBlob(null);
+  }
+
+  return { isRecording, recordedBlob, startRecording, stopRecording, clearRecording };
 }

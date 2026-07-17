@@ -28,6 +28,7 @@ export default function InterviewPage() {
         isSpeaking={interview.isSpeaking}
         isRecording={interview.isRecording}
         recordedBlob={interview.recordedBlob}
+        canRepeat={interview.canRepeat}
         feedbackData={interview.feedbackData}
         isFeedbackLoading={interview.isFeedbackLoading}
         reportSaved={interview.reportSaved}
@@ -38,6 +39,8 @@ export default function InterviewPage() {
         setCustomSubjectInput={interview.setCustomSubjectInput}
         startInterview={interview.startInterview}
         toggleRecording={interview.toggleRecording}
+        reRecord={interview.reRecord}
+        repeatAudio={interview.repeatAudio}
         submitAnswer={interview.submitAnswer}
         endInterview={interview.endInterview}
         getFeedback={interview.getFeedback}

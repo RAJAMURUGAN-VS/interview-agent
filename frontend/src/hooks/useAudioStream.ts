@@ -3,7 +3,9 @@ import { useState, useRef } from 'react';
 export function useAudioStream() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [canRepeat, setCanRepeat] = useState(false);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+  const lastDataUrlRef = useRef<string | null>(null);
 
   async function playStream(response: Response, onComplete?: () => void) {
     // Stop any currently playing audio
@@ -56,12 +58,17 @@ export function useAudioStream() {
       const base64 = btoa(binary);
       const dataUrl = `data:audio/mpeg;base64,${base64}`;
 
+      // Save for repeat
+      lastDataUrlRef.current = dataUrl;
+      setCanRepeat(false); // not yet — will be true after playback ends
+
       const audio = new Audio(dataUrl);
       currentAudioRef.current = audio;
 
       audio.onended = () => {
         setIsSpeaking(false);
         setIsPaused(false);
+        setCanRepeat(true);
         currentAudioRef.current = null;
         if (onComplete) onComplete();
       };
@@ -70,6 +77,7 @@ export function useAudioStream() {
         console.error('Audio playback error:', e);
         setIsSpeaking(false);
         setIsPaused(false);
+        setCanRepeat(!!lastDataUrlRef.current);
         currentAudioRef.current = null;
         if (onComplete) onComplete();
       };
@@ -106,12 +114,41 @@ export function useAudioStream() {
     setIsPaused(false);
   }
 
+  function repeatAudio() {
+    if (!lastDataUrlRef.current || isSpeaking) return;
+    // Stop any current audio
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current = null;
+    }
+    setIsSpeaking(true);
+    setIsPaused(false);
+    setCanRepeat(false);
+    const audio = new Audio(lastDataUrlRef.current);
+    currentAudioRef.current = audio;
+    audio.onended = () => {
+      setIsSpeaking(false);
+      setIsPaused(false);
+      setCanRepeat(true);
+      currentAudioRef.current = null;
+    };
+    audio.onerror = () => {
+      setIsSpeaking(false);
+      setIsPaused(false);
+      setCanRepeat(true);
+      currentAudioRef.current = null;
+    };
+    audio.play().catch(e => console.error('Repeat audio error:', e));
+  }
+
   return {
     isSpeaking,
     isPaused,
+    canRepeat,
     playStream,
     pauseAudio,
     resumeAudio,
     stopAudio,
+    repeatAudio,
   };
 }
