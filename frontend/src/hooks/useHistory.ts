@@ -5,6 +5,8 @@ import type {
   PdfChatHistoryEntry,
   PdfChatMessage,
 } from '../types';
+import { deletePdfVectorStore } from '../api/pdfChatApi';
+import { deletePdfCache }       from './usePdfChatIndexedDB';
 
 // ── localStorage keys ───────────────────────────────────────────────────
 const KEYS = {
@@ -104,10 +106,19 @@ export function loadPdfChatHistory(): PdfChatHistoryEntry[] {
 }
 
 export function deletePdfChatEntry(id: string): PdfChatHistoryEntry[] {
-  const updated = readFromStorage<PdfChatHistoryEntry>(KEYS.pdfchat)
-    .filter((e) => e.id !== id);
+  const all     = readFromStorage<PdfChatHistoryEntry>(KEYS.pdfchat);
+  const entry   = all.find((e) => e.id === id);
+  const updated = all.filter((e) => e.id !== id);
+
   writeToStorage(KEYS.pdfchat, updated);
   emitHistoryChanged();
+
+  // Permanently erase the vector store + IDB cache for this PDF
+  if (entry?.fileHash) {
+    deletePdfVectorStore(entry.fileHash).catch(() => {});   // backend ChromaDB
+    deletePdfCache(entry.fileHash).catch(() => {});          // frontend IndexedDB
+  }
+
   return updated;
 }
 

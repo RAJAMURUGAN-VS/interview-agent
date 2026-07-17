@@ -10,6 +10,7 @@ from ..services.rag_service import (
     build_answer,
     create_session,
     clear_session,
+    delete_vector_store,
     _cached_vector_stores,
     _session_threads,
     CHROMA_PERSIST_DIR,
@@ -255,6 +256,24 @@ def delete_session():
 
     clear_session(thread_id)
     return jsonify({"success": True})
+
+
+@bp.route("/pdf-chat/delete-pdf", methods=["DELETE"])
+def delete_pdf():
+    """
+    Called when the user permanently deletes a PDF from chat history.
+    Removes the ChromaDB vector collection from disk AND from memory so the
+    data is gone for good. The frontend should also clear its IndexedDB cache.
+    """
+    data = request.json or {}
+    file_hash = data.get("file_hash", "").strip()
+
+    if not file_hash:
+        return jsonify({"success": False, "error": "Missing file_hash"}), 400
+
+    deleted = delete_vector_store(file_hash)
+    print(f"[DELETE-PDF] hash={file_hash[:8]}… deleted={deleted}")
+    return jsonify({"success": True, "deleted": deleted})
 
 
 @bp.route("/pdf-chat/session-from-hash", methods=["POST"])

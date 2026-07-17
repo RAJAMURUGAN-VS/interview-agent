@@ -58,7 +58,11 @@ CHROMA_PERSIST_DIR = "./chroma_pdf_db"
 MAX_L2_DISTANCE = 1.2
 
 # ---------------------------------------------------------------------------
-# LLM for PDF chat (Perplexity Sonar)
+# LLM for PDF chat — Perplexity Sonar
+# We combat Sonar's web-search tendency by:
+#   1. Injecting _DOC_GROUNDING at the top of every system prompt
+#   2. Rewriting the user message to anchor it to the uploaded PDF
+#   3. Providing all relevant chunks inside the system prompt
 # ---------------------------------------------------------------------------
 _rag_model = init_chat_model(
     "perplexity:sonar",
@@ -413,16 +417,51 @@ def clear_session(thread_id: str) -> None:
         _session_threads.pop(hash_to_remove, None)
 
 
+def delete_vector_store(file_hash: str) -> bool:
+    """
+    Permanently delete a PDF's ChromaDB collection from disk AND memory.
+    Called when the user removes a PDF from history.
+    Returns True if the collection was found and deleted, False otherwise.
+    """
+    collection_name = f"pdf_chat_{file_hash}"
+
+    # 1. Remove from in-memory caches
+    _cached_vector_stores.pop(file_hash, None)
+
+    # Remove associated thread if any
+    thread_to_remove = _session_threads.pop(file_hash, None)
+    if thread_to_remove:
+        _conversation_history.pop(thread_to_remove, None)
+        logger.info(f"[DELETE] Cleared active session thread {thread_to_remove}")
+
+    # 2. Delete the persisted ChromaDB collection from disk
+    try:
+        import chromadb
+        client = chromadb.PersistentClient(path=CHROMA_PERSIST_DIR)
+        existing = [c.name for c in client.list_collections()]
+        if collection_name in existing:
+            client.delete_collection(collection_name)
+            logger.info(f"[DELETE] ✅ Deleted ChromaDB collection: {collection_name}")
+            return True
+        else:
+            logger.info(f"[DELETE] Collection not found (already gone): {collection_name}")
+            return False
+    except Exception as exc:
+        logger.error(f"[DELETE] Failed to delete collection {collection_name}: {exc}")
+        return False
+
+
 # ---------------------------------------------------------------------------
-# Retrieval
+# Retrieval — query-type classifiers
 # ---------------------------------------------------------------------------
 
-# Cosine similarity threshold (L2 distance for unit-normalised vectors)
+# ── 1. META / overview queries ────────────────────────────────────────────
+# "Summarise this PDF", "What topics are covered?", "Table of contents"
 _META_QUERY_PHRASES = (
     "this pdf", "this document", "the pdf", "the document",
     "topics covered", "what topics", "what are the topics",
     "what is covered", "what does it cover",
-    "summarize", "summary", "give me a summary", "give a summary",
+    "summarize", "summarise", "summary", "give me a summary", "give a summary",
     "overview", "what is in this", "what does this contain",
     "table of contents", "list all topics", "what are all",
     "tell me about this", "explain this pdf", "explain this document",
@@ -431,13 +470,82 @@ _META_QUERY_PHRASES = (
     "what topics are in", "all topics", "the topics",
     "list the topics", "tell me the topics", "give me topics",
     "what is covered in", "what's covered in", "what is in",
+    "how many main chapters", "how many chapters",
+    "what comes after", "what chapter comes after",
+    "what are the names of", "names of the",
+    # Chapter structure questions
+    "title of chapter", "chapter title", "the title of chapter",
+    "what is the title", "name of chapter", "chapter name",
+    "first five chapters", "first chapter", "last chapter",
+    "all chapters", "list chapters", "list the chapters",
+)
+
+# ── 2. Chapter-location queries ───────────────────────────────────────────
+# "Which chapter discusses X?", "In which chapter is Y mentioned?"
+_CHAPTER_QUERY_PHRASES = (
+    "which chapter", "what chapter", "in which chapter",
+    "where does the author explain", "where does the author discuss",
+    "where does the author introduce", "where is it mentioned",
+    "where does the book", "in which section", "where in the book",
+    "which chapter contains", "which chapter introduces",
+    "which chapter discusses", "which chapter explains",
+)
+
+# ── 3. Comparison queries ─────────────────────────────────────────────────
+# "Compare X and Y", "Difference between X and Y"
+_COMPARISON_QUERY_PHRASES = (
+    "compare", "comparison between", "difference between",
+    "contrast", "how do they differ", "both of them",
+    "versus", " vs ", "how does x differ",
+)
+
+# ── 4. List / enumeration queries ────────────────────────────────────────
+# "Name four things", "List the main points", "What are the lessons?"
+_LIST_QUERY_PHRASES = (
+    "name four", "name all", "name the", "list all", "list the",
+    "what are the names", "four things", "give four",
+    "enumerate", "what lessons", "what examples", "what stories",
+    "two main lessons", "main lessons", "key lessons",
+)
+
+# ── 5. Paraphrase / semantic queries ─────────────────────────────────────
+# Rephrased versions of direct questions — needs higher k for recall
+_PARAPHRASE_INDICATORS = (
+    "according to the author", "what does the author think",
+    "what does the author say", "explain the author's view",
+    "in simple words", "explain in simple", "why does the author",
+    "what is meant by", "what does", "how does",
 )
 
 
 def _is_meta_query(query: str) -> bool:
-    """Return True if the query asks about the document as a whole."""
     q = query.lower().strip()
-    return any(phrase in q for phrase in _META_QUERY_PHRASES)
+    if any(phrase in q for phrase in _META_QUERY_PHRASES):
+        return True
+    # Catch "chapter 7", "chapter 1", "chapter 12" etc.
+    if re.search(r'\bchapter\s+\d+\b', q):
+        return True
+    return False
+
+
+def _is_chapter_query(query: str) -> bool:
+    q = query.lower().strip()
+    return any(phrase in q for phrase in _CHAPTER_QUERY_PHRASES)
+
+
+def _is_comparison_query(query: str) -> bool:
+    q = query.lower().strip()
+    return any(phrase in q for phrase in _COMPARISON_QUERY_PHRASES)
+
+
+def _is_list_query(query: str) -> bool:
+    q = query.lower().strip()
+    return any(phrase in q for phrase in _LIST_QUERY_PHRASES)
+
+
+def _is_paraphrase_query(query: str) -> bool:
+    q = query.lower().strip()
+    return any(phrase in q for phrase in _PARAPHRASE_INDICATORS)
 
 
 def _l2_to_cosine_similarity(l2_distance: float) -> float:
@@ -449,54 +557,78 @@ def _l2_to_cosine_similarity(l2_distance: float) -> float:
 def retrieve_context(
     vector_store: Chroma,
     query: str,
-    k: int = 5,
+    k: int = 8,  # raised from 5 → better recall for paraphrased / multi-hop questions
 ) -> tuple[str, list, float]:
     """
-    Run similarity search and return (context_string, source_docs, relevance_score).
+    Route the query through the appropriate retrieval strategy:
 
-    META-QUERY mode: returns all chunks for full-document summarisation.
-    SPECIFIC QUERY: filters by L2 distance threshold (MAX_L2_DISTANCE).
+    META       – full-document scan (k=60) for overview / summary questions
+    CHAPTER    – wide scan (k=20, relaxed threshold) to find chapter headings
+    COMPARISON – broad scan (k=12) to retrieve info about both subjects
+    LIST       – broad scan (k=12) to collect all enumerable items
+    PARAPHRASE – standard scan (k=10, slightly relaxed threshold)
+    DEFAULT    – standard scan (k=8, strict threshold)
     """
+    q_lower = query.lower().strip()
+
     # ── META-QUERY path ───────────────────────────────────────────────────────
     if _is_meta_query(query):
         logger.info(f"[RAG] META-QUERY: '{query}'")
-        all_docs = vector_store.similarity_search(query, k=50)
+        all_docs = vector_store.similarity_search(query, k=60)
         if not all_docs:
             return "", [], 0.0
-        context_parts = []
-        for i, doc in enumerate(all_docs, start=1):
-            page_num = doc.metadata.get("page", 0) + 1
-            source = doc.metadata.get("source", "unknown")
-            context_parts.append(
-                f"[Chunk {i} | Page {page_num} | Source: {source}]\n{doc.page_content}"
-            )
-        context = "\n\n".join(context_parts)
-        return context, all_docs, 1.0
+        context_parts = [
+            f"[Excerpt — Page {doc.metadata.get('page', 0) + 1}]\n{doc.page_content}"
+            for doc in all_docs
+        ]
+        return "\n\n".join(context_parts), all_docs, 1.0
 
-    # ── SPECIFIC QUERY path ───────────────────────────────────────────────────
+    # ── Determine per-query-type k and distance threshold ─────────────────────
+    if _is_chapter_query(query):
+        effective_k   = 20
+        max_l2        = 1.5   # relaxed — chapter headings may be semantically distant
+        query_type    = "CHAPTER"
+    elif _is_comparison_query(query):
+        effective_k   = 12
+        max_l2        = MAX_L2_DISTANCE
+        query_type    = "COMPARISON"
+    elif _is_list_query(query):
+        effective_k   = 12
+        max_l2        = MAX_L2_DISTANCE
+        query_type    = "LIST"
+    elif _is_paraphrase_query(query):
+        effective_k   = 10
+        max_l2        = 1.35  # slightly relaxed for semantic rephrasing
+        query_type    = "PARAPHRASE"
+    else:
+        effective_k   = k
+        max_l2        = MAX_L2_DISTANCE
+        query_type    = "SPECIFIC"
+
+    logger.info(f"[RAG] {query_type} query | k={effective_k} | max_l2={max_l2}")
+
+    # ── Similarity search ─────────────────────────────────────────────────────
     try:
-        retrieved = vector_store.similarity_search_with_score(query, k=k)
+        retrieved = vector_store.similarity_search_with_score(query, k=effective_k)
         docs_with_scores = list(retrieved)
     except (AttributeError, TypeError) as exc:
         logger.warning(f"[RAG] similarity_search_with_score failed ({exc}). Fallback.")
-        retrieved_docs = vector_store.similarity_search(query, k=k)
+        retrieved_docs = vector_store.similarity_search(query, k=effective_k)
         docs_with_scores = [(doc, 2.0) for doc in retrieved_docs]
 
     if not docs_with_scores:
-        logger.info(f"[RAG] No results for: '{query}'")
         return "", [], 0.0
 
-    logger.info(f"[RAG] Query: '{query}'")
     relevant = []
     for doc, l2_dist in docs_with_scores:
         cos_sim = _l2_to_cosine_similarity(l2_dist)
         page_num = doc.metadata.get("page", 0) + 1
-        status = "KEPT" if l2_dist <= MAX_L2_DISTANCE else "FILTERED"
+        status = "KEPT" if l2_dist <= max_l2 else "FILTERED"
         logger.debug(
             f"  Page {page_num} | L2={l2_dist:.4f} | CosSim={cos_sim:.3f} | "
             f"{status} | {doc.page_content[:80]}…"
         )
-        if l2_dist <= MAX_L2_DISTANCE:
+        if l2_dist <= max_l2:
             relevant.append((doc, l2_dist))
 
     if not relevant:
@@ -504,7 +636,7 @@ def retrieve_context(
         return "", [], 0.0
 
     avg_similarity = sum(
-        _l2_to_cosine_similarity(score) for _, score in relevant
+        _l2_to_cosine_similarity(s) for _, s in relevant
     ) / len(relevant)
 
     logger.info(
@@ -512,30 +644,202 @@ def retrieve_context(
         f"Avg cosine: {avg_similarity:.3f}"
     )
 
-    context_parts = []
-    for i, (doc, _) in enumerate(relevant, start=1):
-        page_num = doc.metadata.get("page", 0) + 1
-        source = doc.metadata.get("source", "unknown")
-        context_parts.append(
-            f"[Chunk {i} | Page {page_num} | Source: {source}]\n{doc.page_content}"
-        )
-
-    context = "\n\n".join(context_parts)
-    docs = [doc for doc, _ in relevant]
-    return context, docs, avg_similarity
+    context_parts = [
+        f"[Excerpt — Page {doc.metadata.get('page', 0) + 1}]\n{doc.page_content}"
+        for (doc, _) in relevant
+    ]
+    return "\n\n".join(context_parts), [d for d, _ in relevant], avg_similarity
 
 
 # ---------------------------------------------------------------------------
 # Answer generation
 # ---------------------------------------------------------------------------
 
+# Phrases the LLM uses when it cannot answer from context
 _NO_INFO_PHRASES = (
     "I cannot find this information",
     "not in the provided document",
     "the document does not contain",
     "not mentioned in the",
     "no information about",
+    "is not discussed in",
+    "is not covered in",
+    "cannot be found in",
+    "not present in the",
 )
+
+# ---------------------------------------------------------------------------
+# Shared prompt building blocks
+# ---------------------------------------------------------------------------
+
+# Grounding — prepended to every prompt. Tells the model what "this" means
+# and anchors it to the uploaded PDF without mentioning retrieval internals.
+_DOC_GROUNDING = (
+    "You are a knowledgeable assistant helping a user understand a specific "
+    "PDF document they have uploaded. Every question the user asks — including "
+    "when they say 'this', 'this document', 'this book', 'the pdf', 'it', "
+    "'the document' — refers to that uploaded PDF. "
+    "Do NOT treat these as references to any external source.\n\n"
+)
+
+# Response-style policy — applied to every prompt regardless of query type.
+_RESPONSE_POLICY = """
+RESPONSE STYLE — User-Centered Policy:
+A. Answer the question directly in the first sentence.
+   ✓ Good: "Chapter 7 is titled **Freedom**."
+   ✗ Bad:  "This is listed in the table of contents on Page 4..."
+B. Never mention retrieval mechanics. Do NOT use phrases like:
+   "According to the retrieved document", "This was found on",
+   "The excerpt shows", "Excerpt — Page X", "Retrieved chunk",
+   "Vector search", "Context", "Matching passage", "The context states".
+C. Do NOT cite page numbers inside your answer text — citations are added
+   automatically after your response. Never write "Page X" or "(Page X)".
+D. Every sentence must provide value to the user. Do not add sentences that
+   merely describe where you found the information.
+E. Think "knowledgeable human assistant", not "search engine".
+"""
+
+# Priority and grounding rules — applied after _RESPONSE_POLICY.
+_STRICT_RULES = """
+PRIORITY ORDER — follow in this exact sequence:
+1. READ every excerpt in the context carefully.
+2. If ANY excerpt contains information that answers the question — use it.
+   Provide a clear, direct, complete answer. This is your PRIMARY job.
+3. Use the fallback phrase ONLY IF, after reading every excerpt, none of
+   them contain information that answers the question:
+   "I cannot find this information in the provided document. Please ask
+   questions only about the content in the uploaded PDF."
+4. Never invent, guess, or infer facts not present in the excerpts.
+5. Do NOT include citation numbers like [1], [2], [3] in your response.
+6. NEVER mention "Excerpt", "Chunk", "retrieval", "system instructions",
+   "context window", "system prompt", or any other internal term.
+7. Do NOT search the web or use knowledge outside the provided excerpts.
+"""
+
+
+def _build_system_prompt(query: str, context: str) -> str:
+    """
+    Return the best system prompt for the query type.
+    All prompts embed the User-Centered Response Policy.
+    """
+    # ── 1. OVERVIEW / META ────────────────────────────────────────────────────
+    if _is_meta_query(query):
+        return (
+            _DOC_GROUNDING
+            + _RESPONSE_POLICY
+            + "\nROLE: You are a document overview assistant.\n"
+            "TASK: Answer the user's question directly using ONLY the excerpts below.\n"
+            "• For chapter title questions: state the title immediately, e.g. "
+            "\"Chapter 7 is titled **Freedom**.\"\n"
+            "• For table-of-contents questions: list chapters in order, one per line.\n"
+            "• For overview questions: give a structured summary of the main topics.\n"
+            "• Preserve document order. List chapter names EXACTLY as they appear.\n"
+            + _STRICT_RULES
+            + f"\n=== DOCUMENT EXCERPTS ===\n{context}\n=== END ==="
+        )
+
+    # ── 2. CHAPTER-LOCATION ───────────────────────────────────────────────────
+    if _is_chapter_query(query):
+        return (
+            _DOC_GROUNDING
+            + _RESPONSE_POLICY
+            + "\nROLE: You are a document index assistant.\n"
+            "TASK: Tell the user which chapter or section covers the requested topic.\n"
+            "• Lead with the chapter name/number, e.g. "
+            "\"This topic is covered in Chapter 3: Never Enough.\"\n"
+            "• If multiple chapters cover it, list them concisely.\n"
+            "• If the chapter cannot be identified from the excerpts, say so plainly.\n"
+            + _STRICT_RULES
+            + f"\n=== DOCUMENT EXCERPTS ===\n{context}\n=== END ==="
+        )
+
+    # ── 3. COMPARISON ────────────────────────────────────────────────────────
+    if _is_comparison_query(query):
+        return (
+            _DOC_GROUNDING
+            + _RESPONSE_POLICY
+            + "\nROLE: You are a comparison assistant.\n"
+            "TASK: Compare the entities the user asks about, using only the excerpts.\n"
+            "• Open with a one-sentence summary of the key difference or similarity.\n"
+            "• Then give a structured breakdown (e.g. Background | Outcome | Lesson).\n"
+            "• Use only facts explicitly stated in the excerpts.\n"
+            "• If information on one entity is missing, note that briefly.\n"
+            + _STRICT_RULES
+            + f"\n=== DOCUMENT EXCERPTS ===\n{context}\n=== END ==="
+        )
+
+    # ── 4. LIST / ENUMERATION ────────────────────────────────────────────────
+    if _is_list_query(query):
+        return (
+            _DOC_GROUNDING
+            + _RESPONSE_POLICY
+            + "\nROLE: You are a list-extraction assistant.\n"
+            "TASK: Collect and return all requested items from the excerpts.\n"
+            "• Present items as a clean numbered or bulleted list.\n"
+            "• Include every item found — do not truncate.\n"
+            "• If the excerpts contain fewer items than asked, list only what is there.\n"
+            + _STRICT_RULES
+            + f"\n=== DOCUMENT EXCERPTS ===\n{context}\n=== END ==="
+        )
+
+    # ── 5. DEFAULT — specific / paraphrased / semantic questions ─────────────
+    return (
+        _DOC_GROUNDING
+        + _RESPONSE_POLICY
+        + "\nROLE: You are a precise document Q&A assistant.\n"
+        "TASK: Answer the question using ONLY the excerpts provided.\n"
+        "GUIDANCE:\n"
+        "• Factual question → one clear sentence answer, then elaboration if needed.\n"
+        "• 'Why' / 'How' questions → explain the author's reasoning as stated.\n"
+        "• 'According to the author' → report only what is explicitly written.\n"
+        "• 'What lesson' / 'What does the author draw' → state the lesson exactly.\n"
+        "• If the topic (e.g. Bitcoin, ChatGPT, Elon Musk, Python, SQL, neural "
+        "networks, blockchain, Java) does not appear in the excerpts at all, "
+        "use the fallback phrase from Rule 3.\n"
+        + _STRICT_RULES
+        + f"\n=== DOCUMENT EXCERPTS ===\n{context}\n=== END ==="
+    )
+
+
+# Pronouns / vague references that Sonar mistakes for web queries
+_PRONOUN_REPLACEMENTS = [
+    # Order matters — longer phrases first
+    (r'\bthis document\b',  'the uploaded PDF'),
+    (r'\bthis pdf\b',       'the uploaded PDF'),
+    (r'\bthis book\b',      'the uploaded PDF'),
+    (r'\bthis text\b',      'the uploaded PDF'),
+    (r'\bthis material\b',  'the uploaded PDF'),
+    (r'\bthis content\b',   'the uploaded PDF'),
+    (r'\bthe document\b',   'the uploaded PDF'),
+    (r'\bthe book\b',       'the uploaded PDF'),
+    (r'\bthe text\b',       'the uploaded PDF'),
+    (r'\bin this\b',        'in the uploaded PDF'),
+    (r'\bof this\b',        'of the uploaded PDF'),
+    (r'\bfrom this\b',      'from the uploaded PDF'),
+    (r'\babout this\b',     'about the uploaded PDF'),
+]
+
+_PDF_ANCHOR_PREFIX = (
+    "Using ONLY the document context provided in the system prompt "
+    "(do NOT search the web), answer this question about the uploaded PDF: "
+)
+
+
+def _anchor_query_to_pdf(query: str) -> str:
+    """
+    Rewrite the user query so Perplexity Sonar treats it as a PDF question,
+    not a general web search.
+
+    Steps:
+    1. Replace vague pronouns ('this', 'the document', 'this book'…) with
+       the explicit phrase 'the uploaded PDF'.
+    2. Prepend a hard anchor prefix instructing Sonar to use ONLY the context.
+    """
+    import re as _re
+    q = query.strip()
+    for pattern, replacement in _PRONOUN_REPLACEMENTS:
+        q = _re.sub(pattern, replacement, q, flags=_re.IGNORECASE)
+    return f"{_PDF_ANCHOR_PREFIX}{q}"
 
 
 def build_answer(
@@ -547,16 +851,18 @@ def build_answer(
 ) -> str:
     """
     Invoke the LLM with per-tab conversation history.
-    Gate 1: empty context → reject without calling LLM.
-    Gate 2: cosine < threshold → reject.
-    Gate 3: LLM says 'not found' → skip source citations.
+    Gate 1: empty context  → reject without calling LLM.
+    Gate 2: score == 0     → reject (all chunks filtered by distance).
+    Gate 3: LLM refuses    → skip source citations.
     """
     model = _rag_model
     logger.info(
-        f"[ANSWER] model=sonar | META={_is_meta_query(query)} | "
-        f"score={relevance_score:.3f} | docs={len(source_docs)}"
+        f"[ANSWER] META={_is_meta_query(query)} CHAPTER={_is_chapter_query(query)} "
+        f"CMP={_is_comparison_query(query)} LIST={_is_list_query(query)} "
+        f"score={relevance_score:.3f} docs={len(source_docs)}"
     )
 
+    # Gate 1 & 2 — no relevant chunks found
     if not source_docs or relevance_score == 0.0:
         logger.info("[ANSWER] REJECTED — no relevant chunks.")
         msg = (
@@ -575,48 +881,32 @@ def build_answer(
     logger.info(f"[ANSWER] ACCEPTED — calling LLM with {len(source_docs)} chunks")
     history = _conversation_history.get(thread_id, [])
 
-    if _is_meta_query(query):
-        system_prompt = (
-            "You are a helpful document assistant. "
-            "The user is asking for an overview or summary of the document.\n\n"
-            "TASK: Based ONLY on the document chunks provided below, give a clear and "
-            "well-structured answer. Include all major topics, sections, and key points "
-            "you find in the chunks.\n"
-            "Do NOT use any external knowledge — only what is in the chunks.\n"
-            "Do NOT cite page numbers yourself — they will be added automatically.\n"
-            "Do NOT include citation numbers like [1], [2], [3], etc. in your response.\n\n"
-            f"=== DOCUMENT CONTEXT ===\n{context}\n=== END CONTEXT ==="
-        )
-    else:
-        system_prompt = (
-            "You are a strict document Q&A assistant. "
-            "Answer ONLY from the provided context chunks.\n\n"
-            "CRITICAL RULES:\n"
-            "1. ONLY use information explicitly present in the context chunks below.\n"
-            "2. DO NOT use your training data, general knowledge, or make inferences.\n"
-            "3. If the answer is NOT clearly stated in the context, respond with EXACTLY:\n"
-            "   'I cannot find this information in the provided document. "
-            "Please ask questions only about the content in the uploaded PDF.'\n"
-            "4. Do NOT mention, invent, or paraphrase facts not in the context.\n"
-            "5. Do NOT cite page numbers yourself — they will be added automatically.\n"
-            "6. Do NOT include citation numbers like [1], [2], [3], etc. in your response.\n\n"
-            f"=== DOCUMENT CONTEXT ===\n{context}\n=== END CONTEXT ==="
-        )
+    system_prompt = _build_system_prompt(query, context)
+
+    # ── Anchor the query to the PDF so Sonar doesn't search the web ──────────
+    # We rewrite vague pronouns → explicit "the uploaded PDF", then prefix the
+    # question with a hard anchor. The ORIGINAL query is kept in history so the
+    # conversation reads naturally; only the LLM receives the anchored version.
+    anchored_query = _anchor_query_to_pdf(query)
+    logger.info(f"[ANSWER] Anchored query: {anchored_query!r}")
 
     messages = [{"role": "system", "content": system_prompt}] + history + [
-        {"role": "user", "content": query}
+        {"role": "user", "content": anchored_query}
     ]
 
     response = model.invoke(messages)
-    answer = response.content if hasattr(response, "content") else str(response)
+    raw_answer = response.content if hasattr(response, "content") else str(response)
 
-    if not answer or not answer.strip():
-        answer = "Could not generate an answer. Please try again."
+    if not raw_answer or not raw_answer.strip():
+        raw_answer = "Could not generate an answer. Please try again."
 
-    # Remove any citation markers the LLM might still produce
-    answer = re.sub(r"\[\d+\](?:\[\d+\])*", "", answer).strip()
+    # Strip citation markers the LLM produces
+    raw_answer = re.sub(r"\[\d+\](?:\[\d+\])*", "", raw_answer).strip()
 
-    # Persist turn in conversation history
+    # Post-process: remove self-contradiction preambles ('Note:', 'Correction:')
+    answer = _sanitise_answer(raw_answer)
+
+    # Persist conversation turn with the ORIGINAL query (natural history)
     _conversation_history[thread_id] = history + [
         {"role": "user", "content": query},
         {"role": "assistant", "content": answer},
@@ -638,3 +928,44 @@ def build_answer(
         logger.info("[ANSWER] LLM indicated info not found — skipping citations.")
 
     return answer
+
+# ---------------------------------------------------------------------------
+# Post-processing helpers
+# ---------------------------------------------------------------------------
+
+_SELF_DOUBT_PREFIXES = (
+    'note:', '(note:', 'correction:', '(correction:',
+    'upon re-evaluating', 'however, upon', 'i must correct',
+    'let me correct', 'let me re-read', 're-evaluating',
+    'i need to correct', 'i should correct', 'upon reflection',
+)
+
+
+def _sanitise_answer(text: str) -> str:
+    """
+    Remove self-contradiction patterns that Sonar produces when confused by
+    conflicting instructions.  Catches two formats:
+
+    Format A — "(Note: ...)\n\nCorrection: [real answer]"
+               → returns only the text after 'Correction:'
+
+    Format B — first paragraph is a self-doubt disclaimer, remainder is the
+               real answer  → drops the first paragraph, returns the rest.
+    """
+    # Format A: explicit Correction block
+    correction_match = re.search(
+        r'(?:^|\n)Correction:\s*(.+)',
+        text,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    if correction_match:
+        return correction_match.group(1).strip()
+
+    # Format B: self-doubt first paragraph
+    paragraphs = [p.strip() for p in re.split(r'\n{2,}', text) if p.strip()]
+    if len(paragraphs) > 1:
+        first_lower = paragraphs[0].lower()
+        if any(first_lower.startswith(ph) for ph in _SELF_DOUBT_PREFIXES):
+            return '\n\n'.join(paragraphs[1:]).strip()
+
+    return text

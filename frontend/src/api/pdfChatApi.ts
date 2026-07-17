@@ -119,3 +119,19 @@ export async function createSessionFromHash(
   }
 }
 
+/**
+ * Permanently delete a PDF's vector store from ChromaDB.
+ * Called when the user deletes a PDF from history.
+ * DELETE /pdf-chat/delete-pdf
+ */
+export async function deletePdfVectorStore(fileHash: string): Promise<void> {
+  try {
+    await fetch(`${BASE}/pdf-chat/delete-pdf`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file_hash: fileHash }),
+    });
+  } catch {
+    // Fire-and-forget — don't block the UI if backend is down
+  }
+}
