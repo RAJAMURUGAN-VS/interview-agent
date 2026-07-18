@@ -592,6 +592,41 @@ _PARAPHRASE_INDICATORS = (
     "what is meant by", "what does", "how does",
 )
 
+# ── 6. Page-range queries ─────────────────────────────────────────────────
+# "between page 5 to 10", "pages 5-10", "from page 5 through page 10"
+_PAGE_RANGE_PATTERN = re.compile(
+    r'\bpage[s]?\s*(\d+)\s*(?:to|through|and|-|–|—)\s*(?:page\s*)?(\d+)\b',
+    re.IGNORECASE,
+)
+
+# ── 7. Specific single-page queries ───────────────────────────────────────
+# "on page 7", "page 12", "solve the question on page 7"
+_SPECIFIC_PAGE_PATTERN = re.compile(r'\bpage\s*(\d+)\b', re.IGNORECASE)
+
+# ── 8. "Solve this" intent — combined with a page reference ───────────────
+_SOLVE_QUERY_PHRASES = (
+    "solve", "answer the question", "answer this question", "solve this",
+    "solve the question", "solve it", "work out", "find the solution",
+    "give the solution", "solve the problem", "answer the problem",
+    "answer these", "solve these",
+)
+
+# ── 9. Advisory / knowledge-augmented queries ─────────────────────────────
+# On-topic questions that need the LLM's own judgement/expertise, not just
+# what's literally printed in the document — e.g. prioritisation, study
+# advice, recommendations, opinions about the material.
+_ADVISORY_QUERY_PHRASES = (
+    "should i", "which topics should", "important topics", "most important",
+    "priority", "prioritize", "prioritise", "focus on", "which is more important",
+    "worth learning", "must know", "must learn", "should i prepare",
+    "should i learn", "should i study", "for placements", "for interviews",
+    "for my interview", "for my placement", "recommend", "suggest",
+    "what order should i", "order to study", "order to learn",
+    "before my placement", "before placements", "which one is better",
+    "your opinion", "what do you think", "in your opinion", "any advice",
+    "how should i prepare", "what should i prepare",
+)
+
 
 def _is_meta_query(query: str) -> bool:
     q = query.lower().strip()
@@ -623,10 +658,52 @@ def _is_paraphrase_query(query: str) -> bool:
     return any(phrase in q for phrase in _PARAPHRASE_INDICATORS)
 
 
+def _extract_page_range(query: str) -> Optional[tuple[int, int]]:
+    """Return (start, end) 1-indexed page numbers if the query bounds itself
+    to a page range, e.g. 'between page 5 to 10' or 'pages 5-10'."""
+    m = _PAGE_RANGE_PATTERN.search(query)
+    if not m:
+        return None
+    start, end = int(m.group(1)), int(m.group(2))
+    if start > end:
+        start, end = end, start
+    return start, end
+
+
+def _extract_specific_page(query: str) -> Optional[int]:
+    """Return a single 1-indexed page number if the query references exactly
+    one page (and is NOT already a range, which is checked separately)."""
+    if _PAGE_RANGE_PATTERN.search(query):
+        return None
+    m = _SPECIFIC_PAGE_PATTERN.search(query)
+    return int(m.group(1)) if m else None
+
+
+def _is_solve_query(query: str) -> bool:
+    q = query.lower().strip()
+    return any(phrase in q for phrase in _SOLVE_QUERY_PHRASES)
+
+
+def _is_advisory_query(query: str) -> bool:
+    q = query.lower().strip()
+    return any(phrase in q for phrase in _ADVISORY_QUERY_PHRASES)
+
+
 def _l2_to_cosine_similarity(l2_distance: float) -> float:
     """Convert L2 distance to cosine similarity for unit-normalised vectors."""
     l2_distance = max(0.0, l2_distance)
     return 1.0 - (l2_distance ** 2) / 2.0
+
+
+def _docs_from_get_result(raw: dict) -> list[Document]:
+    """Build Document objects from a raw vector_store.get() result dict,
+    sorted by page number."""
+    docs = [
+        Document(page_content=doc, metadata=meta)
+        for doc, meta in zip(raw.get("documents") or [], raw.get("metadatas") or [])
+    ]
+    docs.sort(key=lambda d: d.metadata.get("page", 0))
+    return docs
 
 
 def retrieve_context(
@@ -637,18 +714,67 @@ def retrieve_context(
     """
     Route the query through the appropriate retrieval strategy:
 
-    META       – full-document scan (k=60) for overview / summary questions
-    CHAPTER    – wide scan (k=20, relaxed threshold) to find chapter headings
-    COMPARISON – broad scan (k=12) to retrieve info about both subjects
-    LIST       – broad scan (k=12) to collect all enumerable items
-    PARAPHRASE – standard scan (k=10, slightly relaxed threshold)
-    DEFAULT    – standard scan (k=8, strict threshold)
+    PAGE_RANGE   – exact metadata filter fetch for an explicit page range
+                   (e.g. "between page 5 to 10") — bypasses similarity search
+                   entirely so nothing in the range is missed.
+    PAGE_SPECIFIC– exact metadata filter fetch for a single referenced page
+                   (e.g. "solve the question on page 7").
+    META         – full-document scan (k=60) for overview / summary questions
+    ADVISORY     – full-document scan (k=60), same as META — the user is
+                   asking for judgement/recommendations that need the whole
+                   topic list as context, even though the answer itself will
+                   lean on the LLM's own knowledge.
+    CHAPTER      – wide scan (k=20, relaxed threshold) to find chapter headings
+    COMPARISON   – broad scan (k=12) to retrieve info about both subjects
+    LIST         – broad scan (k=12) to collect all enumerable items
+    PARAPHRASE   – standard scan (k=10, slightly relaxed threshold)
+    DEFAULT      – standard scan (k=8, strict threshold)
     """
-    q_lower = query.lower().strip()
+    # ── PAGE-RANGE path ────────────────────────────────────────────────────
+    page_range = _extract_page_range(query)
+    if page_range:
+        start, end = page_range
+        logger.info(f"[RAG] PAGE-RANGE query: pages {start}-{end}")
+        where_filter = {"$and": [{"page": {"$gte": start - 1}}, {"page": {"$lte": end - 1}}]}
+        try:
+            raw = vector_store.get(where=where_filter, include=["documents", "metadatas"])
+        except Exception as exc:
+            logger.warning(f"[RAG] Page-range filter failed: {exc}")
+            raw = None
+        docs = _docs_from_get_result(raw) if raw else []
+        if not docs:
+            return "", [], 0.0
+        context_parts = [
+            f"[Excerpt — Page {d.metadata.get('page', 0) + 1}]\n{d.page_content}"
+            for d in docs
+        ]
+        return "\n\n".join(context_parts), docs, 1.0
 
-    # ── META-QUERY path ───────────────────────────────────────────────────────
-    if _is_meta_query(query):
-        logger.info(f"[RAG] META-QUERY: '{query}'")
+    # ── PAGE-SPECIFIC path ─────────────────────────────────────────────────
+    specific_page = _extract_specific_page(query)
+    if specific_page:
+        logger.info(
+            f"[RAG] PAGE-SPECIFIC query: page {specific_page} "
+            f"(solve={_is_solve_query(query)})"
+        )
+        where_filter = {"page": specific_page - 1}
+        try:
+            raw = vector_store.get(where=where_filter, include=["documents", "metadatas"])
+        except Exception as exc:
+            logger.warning(f"[RAG] Specific-page filter failed: {exc}")
+            raw = None
+        docs = _docs_from_get_result(raw) if raw else []
+        if not docs:
+            return "", [], 0.0
+        context_parts = [
+            f"[Excerpt — Page {d.metadata.get('page', 0) + 1}]\n{d.page_content}"
+            for d in docs
+        ]
+        return "\n\n".join(context_parts), docs, 1.0
+
+    # ── META / ADVISORY path — both need the whole document as context ────
+    if _is_meta_query(query) or _is_advisory_query(query):
+        logger.info(f"[RAG] {'META' if _is_meta_query(query) else 'ADVISORY'}-QUERY: '{query}'")
         all_docs = vector_store.similarity_search(query, k=60)
         if not all_docs:
             return "", [], 0.0
@@ -750,70 +876,193 @@ _NO_INFO_PHRASES = (
 # Grounding — prepended to every prompt. Tells the model what "this" means
 # and anchors it to the uploaded PDF without mentioning retrieval internals.
 _DOC_GROUNDING = (
-    "You are a knowledgeable assistant helping a user understand a specific "
-    "PDF document they have uploaded. Every question the user asks — including "
-    "when they say 'this', 'this document', 'this book', 'the pdf', 'it', "
-    "'the document' — refers to that uploaded PDF. "
-    "Do NOT treat these as references to any external source.\n\n"
+    "You are a knowledgeable study assistant helping a user work through a "
+    "specific PDF document they have uploaded. Every question the user asks — "
+    "including when they say 'this', 'this document', 'this book', 'the pdf', "
+    "'it', 'the document' — refers to that uploaded PDF. Do NOT treat these as "
+    "references to any external source.\n\n"
 )
 
 # Response-style policy — applied to every prompt regardless of query type.
 _RESPONSE_POLICY = """
-RESPONSE STYLE — User-Centered Policy:
-A. Answer the question directly in the first sentence.
+RESPONSE STYLE — Final Answer Only Policy:
+A. Output ONLY the final answer. No preamble, no reasoning steps, no process.
    ✓ Good: "Chapter 7 is titled **Freedom**."
    ✗ Bad:  "This is listed in the table of contents on Page 4..."
-B. Never mention retrieval mechanics. Do NOT use phrases like:
-   "According to the retrieved document", "This was found on",
-   "The excerpt shows", "Excerpt — Page X", "Retrieved chunk",
-   "Vector search", "Context", "Matching passage", "The context states".
-C. Do NOT cite page numbers inside your answer text — citations are added
-   automatically after your response. Never write "Page X" or "(Page X)".
-D. Every sentence must provide value to the user. Do not add sentences that
-   merely describe where you found the information.
-E. Think "knowledgeable human assistant", not "search engine".
+B. NEVER reveal your reasoning process, thinking steps, or how you derived
+   the answer. Do NOT write things like:
+   - "Based on the excerpts...", "After reading the context..."
+   - "The excerpt shows", "The provided text states"
+   - "According to the retrieved document", "The context mentions"
+   - "Vector search", "Retrieved chunk", "Matching passage"
+   (Exception: when actually SOLVING a problem, showing worked steps toward
+   the solution is part of the answer itself, not process-narration — that's
+   fine and expected.)
+C. NEVER include self-corrections, retractions, or second-guessing.
+   Do NOT write things like:
+   - "(Note: ...)", "(Self-Correction: ...)", "(Correction: ...)"
+   - "However, upon reflection...", "I must correct my earlier answer"
+   - "Let me re-read...", "Upon re-evaluating..."
+   - "Actually, ..." to contradict something you just said
+D. Do NOT cite page numbers inside your answer text — citations are added
+   automatically. Never write "Page X" or "(Page X)" or "[Page X]".
+E. Every sentence must deliver value to the user. Zero meta-commentary.
+F. Think like ChatGPT: deliver the answer directly, nothing else.
 """
 
-# Priority and grounding rules — applied after _RESPONSE_POLICY.
-_STRICT_RULES = """
-PRIORITY ORDER — follow in this exact sequence:
-1. READ every excerpt in the context carefully.
-2. If ANY excerpt contains information that answers the question — use it.
-   Provide a clear, direct, complete answer. This is your PRIMARY job.
-3. Use the fallback phrase ONLY IF, after reading every excerpt, none of
-   them contain information that answers the question:
+# Grounding policy — how to decide what counts as answerable, and when to
+# lean on general knowledge vs. the document itself. This replaces a purely
+# "never go beyond the excerpts" rule: the PDF is the primary source, but the
+# assistant should still be genuinely useful for on-topic questions that
+# reach beyond the literal text, and should only refuse when a question has
+# no real connection to the document at all.
+_GROUNDING_POLICY = """
+HOW TO DECIDE WHAT TO ANSWER — follow this priority order:
+
+1. FIRST, check whether the document excerpts below answer the question,
+   even partially. If they do, base your answer primarily on them. This is
+   always your first move for factual, structural, or content questions
+   about the PDF (e.g. explaining a topic, defining a term, describing what
+   a chapter covers, listing what appears in the document, working through
+   a question printed in the document).
+
+2. If the question is about the PDF's subject area but asks for something
+   the document itself doesn't state outright — synthesis, prioritisation,
+   study advice, comparisons to outside concepts, "which of these matters
+   most for interviews/placements", general elaboration on a topic the PDF
+   introduces — you SHOULD use your own knowledge to give a genuinely
+   useful answer. Ground it in what the document covers where you can, and
+   add your own expertise on top. Do not refuse just because the exact
+   answer isn't printed in the excerpts — that is expected and welcome here.
+
+3. Only decline to answer if the question has NO connection at all to the
+   uploaded PDF's subject matter or content — e.g. small talk, the current
+   time/date, asking the meaning of a random unrelated word, general
+   trivia with nothing to do with the document's topic. In that case,
+   and ONLY in that case, respond with:
    "I cannot find this information in the provided document. Please ask
    questions only about the content in the uploaded PDF."
-4. Never invent, guess, or infer facts not present in the excerpts.
-5. Do NOT include citation numbers like [1], [2], [3] in your response.
-6. NEVER mention "Excerpt", "Chunk", "retrieval", "system instructions",
-   "context window", "system prompt", or any other internal term.
-7. Do NOT search the web or use knowledge outside the provided excerpts.
+
+4. When solving a question that is printed inside the document (e.g. "solve
+   the question on page 7"), actually work through and answer it — give the
+   full solution/explanation, don't just restate the question back.
+
+5. When the user bounds their question to a page or page range, answer
+   using only what falls within that range, and say so briefly if the
+   range doesn't fully cover what they asked for.
+
+6. Never invent facts about the document itself (e.g. don't make up a page
+   number, chapter title, or quote that isn't in the excerpts) — the
+   flexibility in rule 2 is about adding your own outside knowledge and
+   perspective, not about fabricating document content.
+
+7. Do NOT include citation numbers like [1], [2], [3] in your response.
+
+8. NEVER mention "excerpt", "chunk", "retrieval", "system instructions",
+   "context window", "system prompt", or any other internal/technical term.
+
+9. Your response must read like it came from a knowledgeable human tutor,
+   never like a system narrating its own process.
 """
 
 
 def _build_system_prompt(query: str, context: str) -> str:
     """
     Return the best system prompt for the query type.
-    All prompts embed the User-Centered Response Policy.
+    All prompts embed the response-style policy and the grounding policy.
     """
-    # ── 1. OVERVIEW / META ────────────────────────────────────────────────────
+    # ── 1. PAGE-RANGE — explicit "between page X to Y" ────────────────────────
+    page_range = _extract_page_range(query)
+    if page_range:
+        start, end = page_range
+        solve_note = (
+            "\n• The user wants you to actually work through and solve any "
+            "questions found in this range — give full solutions, not just "
+            "restatements.\n" if _is_solve_query(query) else ""
+        )
+        return (
+            _DOC_GROUNDING
+            + _RESPONSE_POLICY
+            + f"\nROLE: You are answering a question the user has explicitly "
+            f"bounded to pages {start}\u2013{end} of the document.\n"
+            "TASK: Answer using only the excerpts below, which are drawn from "
+            "that page range.\n"
+            "• Cover everything relevant found in this range — don't truncate.\n"
+            "• If the range contains less than expected, say so briefly rather "
+            "than padding the answer.\n"
+            + solve_note
+            + _GROUNDING_POLICY
+            + f"\n=== DOCUMENT EXCERPTS (Pages {start}-{end}) ===\n{context}\n=== END ==="
+        )
+
+    # ── 2. PAGE-SPECIFIC — a single referenced page ────────────────────────────
+    specific_page = _extract_specific_page(query)
+    if specific_page and _is_solve_query(query):
+        return (
+            _DOC_GROUNDING
+            + _RESPONSE_POLICY
+            + f"\nROLE: You are solving a question that is printed on page "
+            f"{specific_page} of the document.\n"
+            "TASK: Find the question(s) in the excerpt below and actually "
+            "work through and answer them — give the full solution or "
+            "explanation, not just a restatement of the question.\n"
+            "• If there are multiple sub-questions on the page, answer each one.\n"
+            "• Showing your working as part of the solution is expected here — "
+            "that's the answer, not process-narration.\n"
+            + _GROUNDING_POLICY
+            + f"\n=== DOCUMENT EXCERPT (Page {specific_page}) ===\n{context}\n=== END ==="
+        )
+    if specific_page:
+        return (
+            _DOC_GROUNDING
+            + _RESPONSE_POLICY
+            + f"\nROLE: You are answering a question about page {specific_page} "
+            "of the document.\n"
+            "TASK: Answer using only the excerpt from that page below.\n"
+            + _GROUNDING_POLICY
+            + f"\n=== DOCUMENT EXCERPT (Page {specific_page}) ===\n{context}\n=== END ==="
+        )
+
+    # ── 3. OVERVIEW / META ────────────────────────────────────────────────────
     if _is_meta_query(query):
         return (
             _DOC_GROUNDING
             + _RESPONSE_POLICY
             + "\nROLE: You are a document overview assistant.\n"
-            "TASK: Answer the user's question directly using ONLY the excerpts below.\n"
+            "TASK: Answer the user's question directly using the excerpts "
+            "below, which span the whole document.\n"
             "• For chapter title questions: state the title immediately, e.g. "
             "\"Chapter 7 is titled **Freedom**.\"\n"
             "• For table-of-contents questions: list chapters in order, one per line.\n"
             "• For overview questions: give a structured summary of the main topics.\n"
             "• Preserve document order. List chapter names EXACTLY as they appear.\n"
-            + _STRICT_RULES
+            + _GROUNDING_POLICY
             + f"\n=== DOCUMENT EXCERPTS ===\n{context}\n=== END ==="
         )
 
-    # ── 2. CHAPTER-LOCATION ───────────────────────────────────────────────────
+    # ── 4. ADVISORY — knowledge-augmented recommendations ─────────────────────
+    if _is_advisory_query(query):
+        return (
+            _DOC_GROUNDING
+            + _RESPONSE_POLICY
+            + "\nROLE: You are a study-planning assistant with full knowledge "
+            "of this document's topics AND general subject-matter expertise.\n"
+            "TASK: The user wants guidance that goes beyond what's literally "
+            "printed in the document — e.g. which topics to prioritise, what's "
+            "most important for interviews/placements, or a recommendation "
+            "between options.\n"
+            "• Use the excerpts to know exactly what topics this document covers.\n"
+            "• Then use your own knowledge and judgement to actually answer the "
+            "advice question — rank, recommend, or explain priority as asked.\n"
+            "• Be direct and specific, not vague hedging like \"it depends\".\n"
+            "• You do not need every claim to be traceable to the excerpts here "
+            "— this is exactly the kind of question where your own expertise "
+            "should lead.\n"
+            + _GROUNDING_POLICY
+            + f"\n=== DOCUMENT EXCERPTS (for topic reference) ===\n{context}\n=== END ==="
+        )
+
+    # ── 5. CHAPTER-LOCATION ───────────────────────────────────────────────────
     if _is_chapter_query(query):
         return (
             _DOC_GROUNDING
@@ -824,26 +1073,27 @@ def _build_system_prompt(query: str, context: str) -> str:
             "\"This topic is covered in Chapter 3: Never Enough.\"\n"
             "• If multiple chapters cover it, list them concisely.\n"
             "• If the chapter cannot be identified from the excerpts, say so plainly.\n"
-            + _STRICT_RULES
+            + _GROUNDING_POLICY
             + f"\n=== DOCUMENT EXCERPTS ===\n{context}\n=== END ==="
         )
 
-    # ── 3. COMPARISON ────────────────────────────────────────────────────────
+    # ── 6. COMPARISON ────────────────────────────────────────────────────────
     if _is_comparison_query(query):
         return (
             _DOC_GROUNDING
             + _RESPONSE_POLICY
             + "\nROLE: You are a comparison assistant.\n"
-            "TASK: Compare the entities the user asks about, using only the excerpts.\n"
+            "TASK: Compare the entities the user asks about.\n"
             "• Open with a one-sentence summary of the key difference or similarity.\n"
             "• Then give a structured breakdown (e.g. Background | Outcome | Lesson).\n"
-            "• Use only facts explicitly stated in the excerpts.\n"
-            "• If information on one entity is missing, note that briefly.\n"
-            + _STRICT_RULES
+            "• Use the excerpts as your primary source; if the document is "
+            "silent on one side of the comparison, you may draw on your own "
+            "knowledge to fill that gap, and say so briefly.\n"
+            + _GROUNDING_POLICY
             + f"\n=== DOCUMENT EXCERPTS ===\n{context}\n=== END ==="
         )
 
-    # ── 4. LIST / ENUMERATION ────────────────────────────────────────────────
+    # ── 7. LIST / ENUMERATION ────────────────────────────────────────────────
     if _is_list_query(query):
         return (
             _DOC_GROUNDING
@@ -852,26 +1102,28 @@ def _build_system_prompt(query: str, context: str) -> str:
             "TASK: Collect and return all requested items from the excerpts.\n"
             "• Present items as a clean numbered or bulleted list.\n"
             "• Include every item found — do not truncate.\n"
-            "• If the excerpts contain fewer items than asked, list only what is there.\n"
-            + _STRICT_RULES
+            "• If the excerpts contain fewer items than asked, say so rather "
+            "than padding the list with invented ones.\n"
+            + _GROUNDING_POLICY
             + f"\n=== DOCUMENT EXCERPTS ===\n{context}\n=== END ==="
         )
 
-    # ── 5. DEFAULT — specific / paraphrased / semantic questions ─────────────
+    # ── 8. DEFAULT — specific / paraphrased / semantic questions ──────────────
     return (
         _DOC_GROUNDING
         + _RESPONSE_POLICY
-        + "\nROLE: You are a precise document Q&A assistant.\n"
-        "TASK: Answer the question using ONLY the excerpts provided.\n"
+        + "\nROLE: You are a precise, helpful document study assistant.\n"
+        "TASK: Answer the question below.\n"
         "GUIDANCE:\n"
-        "• Factual question → one clear sentence answer, then elaboration if needed.\n"
-        "• 'Why' / 'How' questions → explain the author's reasoning as stated.\n"
-        "• 'According to the author' → report only what is explicitly written.\n"
-        "• 'What lesson' / 'What does the author draw' → state the lesson exactly.\n"
-        "• If the topic (e.g. Bitcoin, ChatGPT, Elon Musk, Python, SQL, neural "
-        "networks, blockchain, Java) does not appear in the excerpts at all, "
-        "use the fallback phrase from Rule 3.\n"
-        + _STRICT_RULES
+        "• Factual question about the document → clear, direct answer grounded "
+        "in the excerpts, elaborate briefly if useful.\n"
+        "• 'Why' / 'How' questions about the document's content → explain the "
+        "reasoning or mechanism as stated in the excerpts.\n"
+        "• If the question is on-topic but reaches beyond the literal text "
+        "(e.g. asking for a clearer explanation, real-world context, or an "
+        "example not in the document), use your own knowledge to help, while "
+        "staying consistent with what the document says.\n"
+        + _GROUNDING_POLICY
         + f"\n=== DOCUMENT EXCERPTS ===\n{context}\n=== END ==="
     )
 
@@ -932,9 +1184,11 @@ def build_answer(
     """
     model = _rag_model
     logger.info(
-        f"[ANSWER] META={_is_meta_query(query)} CHAPTER={_is_chapter_query(query)} "
-        f"CMP={_is_comparison_query(query)} LIST={_is_list_query(query)} "
-        f"score={relevance_score:.3f} docs={len(source_docs)}"
+        f"[ANSWER] META={_is_meta_query(query)} ADVISORY={_is_advisory_query(query)} "
+        f"CHAPTER={_is_chapter_query(query)} CMP={_is_comparison_query(query)} "
+        f"LIST={_is_list_query(query)} PAGE_RANGE={_extract_page_range(query)} "
+        f"PAGE={_extract_specific_page(query)} score={relevance_score:.3f} "
+        f"docs={len(source_docs)}"
     )
 
     # Gate 1 & 2 — no relevant chunks found
@@ -975,8 +1229,11 @@ def build_answer(
     if not raw_answer or not raw_answer.strip():
         raw_answer = "Could not generate an answer. Please try again."
 
-    # Strip citation markers the LLM produces
-    raw_answer = re.sub(r"\[\d+\](?:\[\d+\])*", "", raw_answer).strip()
+    # Strip citation markers the LLM produces ([1], [2], etc.)
+    raw_answer = re.sub(r'\[\d+\](?:\[\d+\])*', '', raw_answer).strip()
+
+    # Strip [Excerpt — Page X] markers that Sonar leaks
+    raw_answer = re.sub(r'\[Excerpt\s*[\u2014\-]+\s*Page\s*\d+\]', '', raw_answer, flags=re.IGNORECASE).strip()
 
     # Post-process: remove self-contradiction preambles ('Note:', 'Correction:')
     answer = _sanitise_answer(raw_answer)
@@ -1013,34 +1270,133 @@ _SELF_DOUBT_PREFIXES = (
     'upon re-evaluating', 'however, upon', 'i must correct',
     'let me correct', 'let me re-read', 're-evaluating',
     'i need to correct', 'i should correct', 'upon reflection',
+    'self-correction:', '(self-correction', 'corrected answer:',
+    'i cannot find this information in the provided document',
+    'correction based on', 'upon reviewing', 'upon re-reading',
+    'therefore, i cannot', 'therefore, the answer',
 )
+
+# Regex patterns for inline parenthetical reasoning leakage
+_INLINE_REASONING_PATTERNS = [
+    # (Note: ...) multi-line parenthetical — use re.DOTALL via flag in _strip_inline_reasoning
+    r'\(\s*(?:note|self-correction|correction|however|caveat|clarification|disclaimer)[^)]*\)',
+    # Multi-line (Note: ...) that spans several lines — greedy match up to closing paren
+    r'\(\s*(?i:note|self-correction|correction)[\s\S]*?\)',
+    # "However, since the full text..." trailing qualifications
+    r'(?i)however,\s+since\s+the\s+(?:full\s+)?(?:text|content|excerpts?)\s+(?:for\s+these\s+pages?\s+)?(?:is|are)\s+not\s+fully\s+(?:present|available|provided)[^.]*\.',
+    # Parenthetical page-count disclaimers
+    r'\(\s*(?:only\s+)?(?:fragments?|partial|excerpts?)\s+(?:are\s+)?provided[^)]*\)',
+    # "The most accurate answer based strictly on..."
+    r'(?i)the most accurate answer based strictly on[^.]*\.',
+    # "Based on the excerpts provided for pages..."
+    r'(?i)based on the (?:excerpts?|context|provided (?:text|excerpts?)) (?:provided )?for[^,\.]*[,\.]',
+    # "The provided excerpts do not include..."
+    r'(?i)the provided excerpts? do not (?:include|contain)[^.]*\.',
+    # "(Note: The provided excerpts do not ...)"
+    r'\([^)]*provided excerpts?[^)]*\)',
+    # [Excerpt — Page X] inline markers (em-dash or hyphen)
+    r'\[Excerpt\s*[\u2014\-]+\s*Page\s*\d+\]',
+    # Though text notes X / text notes Y inline qualifiers
+    r'\(though\s+text\s+notes[^)]*\)',
+]
+
+
+def _strip_inline_reasoning(text: str) -> str:
+    """Remove inline parenthetical reasoning/disclaimers from Sonar output."""
+    for pattern in _INLINE_REASONING_PATTERNS:
+        text = re.sub(pattern, '', text, flags=re.DOTALL | re.IGNORECASE)
+    # Collapse triple+ newlines left behind
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    # Clean up stray whitespace before punctuation left by removals
+    text = re.sub(r'  +', ' ', text)
+    return text.strip()
+
+
+def _find_corrected_answer_block(text: str) -> str | None:
+    """
+    If the model wrote a long response with a 'Corrected Answer:' / 'Correction based on...'
+    section, extract just the answer part.
+    """
+    # Match "Corrected Answer:" / "Final Answer:" labels
+    m = re.search(
+        r'(?i)(?:corrected\s+answer|final\s+answer)\s*(?:\([^)]*\))?\s*:\s*(.+)',
+        text,
+        flags=re.DOTALL,
+    )
+    if m:
+        return m.group(1).strip()
+
+    # Match "Correction based on re-evaluating...: <answer>"
+    m = re.search(
+        r'(?i)correction\s+based\s+on[^:]*:\s*(.+)',
+        text,
+        flags=re.DOTALL,
+    )
+    if m:
+        return m.group(1).strip()
+
+    return None
 
 
 def _sanitise_answer(text: str) -> str:
     """
-    Remove self-contradiction patterns that Sonar produces when confused by
-    conflicting instructions.  Catches two formats:
+    Remove reasoning leakage that Perplexity Sonar produces.
 
-    Format A — "(Note: ...)\n\nCorrection: [real answer]"
-               → returns only the text after 'Correction:'
-
-    Format B — first paragraph is a self-doubt disclaimer, remainder is the
-               real answer  → drops the first paragraph, returns the rest.
+    Handles these Sonar quirks:
+    A. Explicit 'Corrected Answer:' / 'Correction based on...' blocks → extract only that.
+    B. Explicit 'Correction:' block                                   → extract only that.
+    C. Self-doubt first paragraph(s)                                  → drop them.
+    D. Any paragraph that is purely meta-commentary                   → strip it.
+    E. Inline parenthetical/bracket reasoning markers                 → strip them.
     """
-    # Format A: explicit Correction block
+    # ── A. 'Corrected Answer:' / 'Correction based on...' → keep only the answer ──
+    corrected = _find_corrected_answer_block(text)
+    if corrected:
+        return _strip_inline_reasoning(corrected)
+
+    # ── B. Explicit 'Correction:' block ───────────────────────────────────────────
     correction_match = re.search(
         r'(?:^|\n)Correction:\s*(.+)',
         text,
         flags=re.IGNORECASE | re.DOTALL,
     )
     if correction_match:
-        return correction_match.group(1).strip()
+        return _strip_inline_reasoning(correction_match.group(1).strip())
 
-    # Format B: self-doubt first paragraph
+    # ── C. Drop self-doubt paragraphs from the top ────────────────────────────────
     paragraphs = [p.strip() for p in re.split(r'\n{2,}', text) if p.strip()]
-    if len(paragraphs) > 1:
+    # Keep dropping leading paragraphs as long as they are self-doubt
+    while paragraphs:
         first_lower = paragraphs[0].lower()
         if any(first_lower.startswith(ph) for ph in _SELF_DOUBT_PREFIXES):
-            return '\n\n'.join(paragraphs[1:]).strip()
+            paragraphs = paragraphs[1:]
+        else:
+            break
+    if paragraphs:
+        text = '\n\n'.join(paragraphs)
 
-    return text
+    # Re-split after potential drops
+    paragraphs = [p.strip() for p in re.split(r'\n{2,}', text) if p.strip()]
+
+    # ── D. Strip any paragraph that is purely meta-commentary ─────────────────────
+    _META_PARA_PATTERNS = [
+        r'(?i)^\(note:',
+        r'(?i)^\(self-correction:',
+        r'(?i)^however,\s+since\s+the\s+(full\s+)?(?:text|excerpts?)',
+        r'(?i)^the most accurate answer based strictly',
+        r'(?i)^based on the (?:excerpts?|context)',
+        r'(?i)^the provided excerpts?\s+do not',
+        r'(?i)^since\s+the\s+(?:full\s+)?(?:text|excerpts?)',
+        r'(?i)^correction based on',
+        r'(?i)^upon reviewing',
+        r'(?i)^upon re-',
+    ]
+    cleaned_paragraphs = [
+        p for p in paragraphs
+        if not any(re.match(pat, p) for pat in _META_PARA_PATTERNS)
+    ]
+    if cleaned_paragraphs:
+        text = '\n\n'.join(cleaned_paragraphs)
+
+    # ── E. Strip inline parenthetical reasoning & [Excerpt — Page X] markers ─────
+    return _strip_inline_reasoning(text)

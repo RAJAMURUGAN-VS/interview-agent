@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import NavBar from './components/layout/NavBar';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { SectionCacheProvider } from './context/SectionCacheContext';
+import { PdfChatProvider } from './context/PdfChatContext';
 import InterviewPage from './pages/InterviewPage';
 import NotesSubjectPage from './pages/NotesSubjectPage';
 import PdfChatPage from './pages/PdfChatPage';
@@ -15,8 +16,9 @@ import PrepPlanPage from './components/prepplan/PrepPlanPage';
 export default function App() {
   return (
     <SectionCacheProvider>
-      <div className="min-h-screen bg-[#0a0a0f]">
-        <NavBar />
+      <PdfChatProvider>
+        <div className="min-h-screen bg-[#0a0a0f]">
+          <NavBar />
 
         {/* Below the fixed navbar */}
         <main className="pt-16 min-h-screen flex flex-col">
@@ -61,6 +63,7 @@ export default function App() {
           </ErrorBoundary>
         </main>
         </div>
+      </PdfChatProvider>
     </SectionCacheProvider>
   );
 }

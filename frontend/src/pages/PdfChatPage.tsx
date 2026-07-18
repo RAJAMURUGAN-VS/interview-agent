@@ -1,5 +1,5 @@
 import { useState }             from 'react';
-import { usePdfChat }            from '../hooks/usePdfChat';
+import { usePdfChatContext }     from '../context/PdfChatContext';
 import { useLivePdfChatHistory } from '../hooks/useHistory';
 import PdfTabBar                 from '../components/pdfchat/PdfTabBar';
 import UploadArea                from '../components/pdfchat/UploadArea';
@@ -9,12 +9,11 @@ import PdfChatSidebar            from '../components/pdfchat/PdfChatSidebar';
 export default function PdfChatPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  // Closed history — reactive (custom DOM event + storage event)
   const { closedEntries, deleteClosedEntry } = useLivePdfChatHistory();
 
   const {
     tabs, activeThreadId, activeTab,
-    showUploadPanel, isUploading, uploadError,
+    showUploadPanel, uploadProgress,
     mode, textInput, isAsking, isSpeaking, isPaused, isRecording, recordedBlob,
     setMode, setTextInput,
     handleUpload, handleSelectTab, handleCloseTab, handleShowUploadPanel,
@@ -23,7 +22,7 @@ export default function PdfChatPage() {
     pauseAudio, resumeAudio, stopAudio,
     markMessageStreamingComplete,
     restoreFromHistory,
-  } = usePdfChat();
+  } = usePdfChatContext();
 
   return (
     <div
@@ -69,34 +68,22 @@ export default function PdfChatPage() {
             className="border border-t-0 border-[#2a2a3d] rounded-b-2xl
               rounded-tr-2xl bg-[#13131a] p-5 flex flex-col gap-5"
           >
-          {/* Upload area */}
-            {showUploadPanel && (
+            {/* Upload area — shown when uploading OR when showUploadPanel is true */}
+            {(showUploadPanel || uploadProgress.active) && (
               <UploadArea
                 onFileSelect={handleUpload}
-                isUploading={isUploading}
-                uploadError={uploadError}
-                fileName={null}
+                isUploading={uploadProgress.active}
+                uploadError={uploadProgress.error}
+                fileName={uploadProgress.active ? uploadProgress.fileName : null}
                 onReset={() => {}}
+                uploadStage={uploadProgress.stage}
+                uploadMessage={uploadProgress.message}
+                uploadPct={uploadProgress.progress}
               />
             )}
 
-            {/* Empty state */}
-            {tabs.length === 0 && !showUploadPanel && (
-              <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
-                <div className="w-14 h-14 rounded-xl bg-[#1c1c27] border border-[#2a2a3d] flex items-center justify-center">
-                  <i className="fas fa-file-pdf text-[#4f46e5] text-2xl" />
-                </div>
-                <p className="text-sm font-semibold text-[#f0f0ff]">No PDFs open</p>
-                <p className="text-xs text-[#8b8ba8]">
-                  Click{' '}
-                  <span className="text-[#4f46e5] font-medium">+ Add PDF</span>{' '}
-                  above to get started
-                </p>
-              </div>
-            )}
-
             {/* Chat window */}
-            {activeTab && !showUploadPanel && (
+            {activeTab && !showUploadPanel && !uploadProgress.active && (
               <ChatWindow
                 messages={activeTab.messages}
                 mode={mode}
@@ -109,17 +96,15 @@ export default function PdfChatPage() {
                 onModeChange={setMode}
                 onTextChange={setTextInput}
                 onAskText={handleAskText}
+                onSubmitSpeech={handleSubmitSpeech}
                 onStartRecording={startRecording}
                 onStopRecording={stopRecording}
-                onSubmitSpeech={handleSubmitSpeech}
                 onPauseAudio={pauseAudio}
                 onResumeAudio={resumeAudio}
                 onStopAudio={stopAudio}
-                onStreamingComplete={(msgId) => {
-                  if (activeTab.threadId) {
-                    markMessageStreamingComplete(activeTab.threadId, msgId);
-                  }
-                }}
+                onStreamingComplete={(msgId) =>
+                  markMessageStreamingComplete(activeTab.threadId, msgId)
+                }
               />
             )}
           </div>

@@ -1,5 +1,6 @@
 import sys
 import os
+import fnmatch
 
 # ── Pre-import libraries that write files to site-packages on first import ──
 # cv2 writes cv2/config.py and cv2/config-3.py when first imported.
@@ -19,16 +20,44 @@ from app import create_app
 app = create_app()
 
 if __name__ == "__main__":
-    # Patterns matched against full file paths via fnmatch.
-    # "*site-packages*" matches on both Windows (backslash) and Unix paths.
-    # NOTE: do NOT add "*.pyc" here — Werkzeug already includes it internally
-    # and adding it to excludes causes ValueError: conflicting patterns.
+    # ── Patch Werkzeug's reloader to normalize Windows backslashes ──────────
+    # On Windows, Werkzeug passes backslash paths to fnmatch which expects
+    # forward slashes, so "*site-packages*" never matches. We fix this by
+    # monkey-patching the reloader's _should_reload check.
+    try:
+        from werkzeug._reloader import ReloaderLoop
+
+        _orig_should_reload = ReloaderLoop._should_reload  # type: ignore[attr-defined]
+
+        def _patched_should_reload(self, filename: str) -> bool:
+            # Normalize to forward slashes so fnmatch patterns work on Windows
+            normalized = filename.replace("\\", "/")
+            for pattern in _IGNORE:
+                if fnmatch.fnmatch(normalized, pattern):
+                    return False
+            return _orig_should_reload(self, filename)
+
+    except Exception:
+        _patched_should_reload = None  # type: ignore[assignment]
+
+    # Patterns matched against full file paths (forward-slash normalized).
     _IGNORE = [
-        "*site-packages*",      # third-party libraries
-        "*dist-packages*",      # Debian/Ubuntu variant
-        "*huggingface*",        # model cache writes
-        "*.paddlex*",           # PaddleOCR model cache
+        "*/site-packages/*",    # third-party libraries (pip install)
+        "*/dist-packages/*",    # Debian/Ubuntu system packages
+        "*/AppData/*",          # Windows user AppData (paddle, torch, etc.)
+        "*/huggingface/*",      # HuggingFace model cache writes
+        "*/.paddlex/*",         # PaddleOCR model cache
+        "*paddlepaddle*",       # Paddle framework internals
+        "*paddle*",             # Paddle (any paddle path)
+        "*pyparsing*",          # pyparsing library
     ]
+
+    # Apply the patch now that _IGNORE is defined
+    if _patched_should_reload is not None:
+        try:
+            ReloaderLoop._should_reload = _patched_should_reload  # type: ignore[method-assign]
+        except Exception:
+            pass
 
     app.run(
         debug=True,
