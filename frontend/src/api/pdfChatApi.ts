@@ -2,39 +2,57 @@ import type { UploadResponse, AskTextResponse } from '../types';
 
 const BASE = import.meta.env.VITE_API_URL;
 
+/** Processing stages used by the frontend animated progress. */
+export type UploadStage =
+  | 'idle' | 'starting' | 'reading' | 'organising'
+  | 'understanding' | 'indexing' | 'finalizing' | 'done' | 'error';
+
 /**
- * Upload a PDF file — returns thread_id + file_hash on success.
+ * Upload a PDF — waits for the backend to finish processing (blocking).
+ * Returns { thread_id, file_hash } on success.
  * POST /pdf-chat/upload
  */
+export async function uploadPdfWithProgress(
+  file: File,
+): Promise<{ thread_id: string; file_hash: string }> {
+  const formData = new FormData();
+  formData.append('pdf', file);
+  const res  = await fetch(`${BASE}/pdf-chat/upload`, { method: 'POST', body: formData });
+  const data = await res.json() as UploadResponse;
+  if (!data.success || !data.thread_id || !data.file_hash) {
+    throw new Error(data.error ?? 'Upload failed. Please try again.');
+  }
+  return { thread_id: data.thread_id, file_hash: data.file_hash };
+}
+
+/** Legacy alias — kept for compatibility. */
 export async function uploadPdf(file: File): Promise<UploadResponse> {
   const formData = new FormData();
   formData.append('pdf', file);
-  const res = await fetch(`${BASE}/pdf-chat/upload`, {
-    method: 'POST',
-    body: formData,
-  });
+  const res = await fetch(`${BASE}/pdf-chat/upload`, { method: 'POST', body: formData });
   return res.json();
 }
 
 /**
- * Ask a text question for a specific PDF thread.
+ * Ask a text question. Sends file_hash so the backend can
+ * auto-recover the session after a restart.
  * POST /pdf-chat/ask-text
  */
 export async function askText(
   threadId: string,
   question: string,
+  fileHash?: string,
 ): Promise<AskTextResponse> {
   const res = await fetch(`${BASE}/pdf-chat/ask-text`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ thread_id: threadId, question }),
+    body: JSON.stringify({ thread_id: threadId, question, file_hash: fileHash ?? '' }),
   });
   return res.json();
 }
 
 /**
  * Step 1 of speech pipeline: transcribe audio to text.
- * Returns the transcript immediately so the UI can show it right away.
  * POST /pdf-chat/transcribe
  */
 export async function transcribeAudio(
@@ -42,15 +60,12 @@ export async function transcribeAudio(
 ): Promise<{ success: boolean; transcript?: string; error?: string }> {
   const formData = new FormData();
   formData.append('audio', audioBlob, 'question.webm');
-  const res = await fetch(`${BASE}/pdf-chat/transcribe`, {
-    method: 'POST',
-    body: formData,
-  });
+  const res = await fetch(`${BASE}/pdf-chat/transcribe`, { method: 'POST', body: formData });
   return res.json();
 }
 
 /**
- * Step 2 of speech pipeline: RAG retrieval + LLM answer + TTS stream.
+ * Step 2 of speech pipeline: RAG + LLM + TTS stream.
  * POST /pdf-chat/ask-speech-answer
  */
 export async function askSpeechAnswer(
@@ -64,11 +79,7 @@ export async function askSpeechAnswer(
   });
   const rawAnswer = res.headers.get('X-Answer-Text') ?? '';
   let answerText = '';
-  try {
-    answerText = decodeURIComponent(rawAnswer);
-  } catch (e) {
-    answerText = rawAnswer;
-  }
+  try { answerText = decodeURIComponent(rawAnswer); } catch { answerText = rawAnswer; }
   return { response: res, answerText, ok: res.ok };
 }
 
@@ -84,10 +95,7 @@ export async function streamTtsAudio(text: string): Promise<Response> {
   });
 }
 
-/**
- * Delete a PDF session when a tab is closed. Fire-and-forget.
- * DELETE /pdf-chat/session
- */
+/** Delete a PDF session when a tab is closed. Fire-and-forget. */
 export async function deleteSession(threadId: string): Promise<void> {
   await fetch(`${BASE}/pdf-chat/session`, {
     method: 'DELETE',
@@ -98,8 +106,6 @@ export async function deleteSession(threadId: string): Promise<void> {
 
 /**
  * Create a new session for an already-embedded PDF (IDB cache hit).
- * The backend reuses the existing ChromaDB collection for this fileHash
- * without re-processing the file.
  * POST /pdf-chat/session-from-hash
  */
 export async function createSessionFromHash(
@@ -114,14 +120,12 @@ export async function createSessionFromHash(
     });
     return res.json();
   } catch {
-    // If the endpoint doesn't exist yet, signal a cache-miss so caller falls back to full upload
     return { success: false, error: 'cache-miss' };
   }
 }
 
 /**
  * Permanently delete a PDF's vector store from ChromaDB.
- * Called when the user deletes a PDF from history.
  * DELETE /pdf-chat/delete-pdf
  */
 export async function deletePdfVectorStore(fileHash: string): Promise<void> {
@@ -131,7 +135,5 @@ export async function deletePdfVectorStore(fileHash: string): Promise<void> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ file_hash: fileHash }),
     });
-  } catch {
-    // Fire-and-forget — don't block the UI if backend is down
-  }
+  } catch { /* fire-and-forget */ }
 }

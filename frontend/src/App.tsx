@@ -60,7 +60,7 @@ export default function App() {
             </Routes>
           </ErrorBoundary>
         </main>
-      </div>
+        </div>
     </SectionCacheProvider>
   );
 }

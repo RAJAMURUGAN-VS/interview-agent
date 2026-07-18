@@ -69,7 +69,7 @@ export default function PdfChatPage() {
             className="border border-t-0 border-[#2a2a3d] rounded-b-2xl
               rounded-tr-2xl bg-[#13131a] p-5 flex flex-col gap-5"
           >
-            {/* Upload area */}
+          {/* Upload area */}
             {showUploadPanel && (
               <UploadArea
                 onFileSelect={handleUpload}
@@ -123,7 +123,6 @@ export default function PdfChatPage() {
               />
             )}
           </div>
-
         </div>
       </div>
     </div>
