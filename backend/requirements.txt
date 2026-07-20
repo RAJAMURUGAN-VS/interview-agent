@@ -21,10 +21,15 @@ tifffile<2025.0
 # PDF extraction — fast C-backed engine (replaces pypdf/PyPDFLoader)
 pymupdf
 
-# OCR for scanned / image-based PDF pages
+# OCR for scanned / image-based PDF pages (Tesseract + Ghostscript required)
+# System deps: apt-get install -y tesseract-ocr ghostscript  (or choco install on Windows)
+ocrmypdf
+
+# Legacy OCR packages — no longer used by rag_service after OCRmyPDF migration.
+# Remove these once confirmed nothing else in the codebase imports them.
 paddlepaddle
 paddleocr
 
-# Image processing (required by PaddleOCR)
+# Image processing (required by PaddleOCR — keep until paddle packages removed)
 pillow
 opencv-python-headless

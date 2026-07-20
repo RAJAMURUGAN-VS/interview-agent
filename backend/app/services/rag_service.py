@@ -45,6 +45,13 @@ logger = logging.getLogger(__name__)
 # Pages with fewer than this many meaningful characters are treated as scanned
 MIN_TEXT_CHARS = 50
 
+# Minimum fraction of extracted characters that must be normal printable text
+# (letters, digits, whitespace, common punctuation) for native text to be trusted.
+# Pages with plenty of characters but a low ratio are typically Type3/CID fonts
+# with no ToUnicode map — PyMuPDF extracts them as control-code garbage, not
+# real text. Measured gap on affected PDFs: garbled ≤0.87, readable ≥0.90.
+MIN_PRINTABLE_RATIO = 0.88
+
 # Max parallel threads for OCR (keep reasonable to avoid memory pressure)
 OCR_WORKERS = 4
 
@@ -112,37 +119,15 @@ _embeddings = HuggingFaceEmbeddings(
 _st_model = _embeddings._client  # SentenceTransformer instance
 
 # ---------------------------------------------------------------------------
-# PaddleOCR — warmed up ONCE (downloads ~18 MB models on first use)
+# OCRmyPDF — Tesseract-based OCR for scanned pages
+# Requires system binaries: tesseract-ocr, ghostscript
+# pip install ocrmypdf
 # ---------------------------------------------------------------------------
-_paddle_ocr = None  # lazy-initialised on first scanned page
 
-
-def _get_paddle_ocr():
-    """
-    Return the singleton PaddleOCR instance.
-    Uses only lang='en' — valid across PaddleOCR 2.x and 3.x.
-    """
-    global _paddle_ocr
-    if _paddle_ocr is None:
-        try:
-            # Skip slow connectivity check (PaddleOCR 3.x feature, ignored in 2.x)
-            os.environ.setdefault("PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK", "True")
-
-            from paddleocr import PaddleOCR
-            import paddleocr as _poc
-            ver = getattr(_poc, "__version__", "unknown")
-            logger.info(f"[OCR] Initialising PaddleOCR {ver}…")
-
-            # Use only lang= which is valid in ALL PaddleOCR versions (2.x and 3.x)
-            _paddle_ocr = PaddleOCR(lang="en")
-            logger.info("[OCR] PaddleOCR ready.")
-        except ImportError:
-            logger.warning("[OCR] paddleocr not installed — scanned pages will be skipped.")
-        except Exception as exc:
-            logger.error(f"[OCR] PaddleOCR init failed: {exc} — scanned pages will be skipped.")
-    return _paddle_ocr
-
-
+# Tesseract language code(s) for OCRmyPDF.
+# Matches the old PaddleOCR lang="en" default.
+# Change to e.g. "eng+fra" for multilingual documents.
+OCR_LANGUAGE = "eng"
 
 # ---------------------------------------------------------------------------
 # In-memory caches
@@ -280,83 +265,108 @@ def _get_file_hash(file_bytes: bytes) -> str:
 
 
 def _is_text_page(text: str) -> bool:
-    """Return True if the page has enough real text (not a scanned image)."""
-    # Strip whitespace and common PDF artefacts before counting
+    """Return True if the page has enough READABLE text — not a scanned
+    image, and not garbled/undecodable text from a broken font encoding
+    (e.g. Type3 fonts lacking a ToUnicode map).
+    """
     clean = re.sub(r"\s+", "", text)
-    return len(clean) >= MIN_TEXT_CHARS
+    if len(clean) < MIN_TEXT_CHARS:
+        return False
+
+    printable = sum(
+        1 for c in text
+        if c.isalnum() or c.isspace() or c in ".,;:!?()-'\"/%&"
+    )
+    ratio = printable / len(text) if text else 0.0
+    return ratio >= MIN_PRINTABLE_RATIO
 
 
-def _ocr_page(page_index: int, page_pixmap_bytes: bytes) -> tuple[int, str]:
+import tempfile
+
+
+def _run_ocrmypdf(pdf_path: str, page_numbers: list) -> list:
     """
-    Run PaddleOCR on a single rendered page image (bytes).
-    Handles both PaddleOCR 2.x and 3.x return formats.
-    Returns (page_index, extracted_text).
-    Called from a thread pool.
+    Run OCRmyPDF on ONLY the given 1-indexed page numbers (the pages Pass 1
+    flagged as scanned/low-text), then re-extract their text with PyMuPDF
+    now that OCRmyPDF has embedded a searchable text layer for them.
+
+    Returns [(page_num_1indexed, text), ...] — only pages that ended up
+    with usable text are included, same contract as the old OCR path.
     """
-    ocr = _get_paddle_ocr()
-    if ocr is None:
-        return page_index, ""
     try:
-        import numpy as np
-        import cv2
+        import ocrmypdf
+    except ImportError:
+        logger.warning("[OCR] ocrmypdf not installed — scanned pages will be skipped.")
+        return []
 
-        # Decode the PNG bytes → numpy array for PaddleOCR
-        nparr = np.frombuffer(page_pixmap_bytes, np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        if img is None:
-            return page_index, ""
+    pages_arg = ",".join(str(p) for p in page_numbers)
+    tmp_output = None
+    try:
+        fd, tmp_output = tempfile.mkstemp(suffix=".pdf")
+        os.close(fd)
 
-        # Call without cls= (valid in both 2.x and 3.x)
-        result = ocr.ocr(img)
+        logger.info(
+            f"[OCR] Running OCRmyPDF on {len(page_numbers)} "
+            f"page(s): {pages_arg}"
+        )
 
-        if not result:
-            return page_index, ""
+        ocrmypdf.ocr(
+            pdf_path,
+            tmp_output,
+            pages=pages_arg,
+            language=OCR_LANGUAGE,
+            skip_text=True,       # never re-OCR pages that already have text
+            deskew=True,          # straighten crooked scans
+            rotate_pages=True,    # fix misrotated pages
+            jobs=OCR_WORKERS,
+            output_type="pdf",    # plain pdf — we only need to re-extract text
+            progress_bar=False,
+        )
 
-        lines = []
+        results = []
+        out_doc = fitz.open(tmp_output)
+        for page_num in page_numbers:
+            text = out_doc[page_num - 1].get_text("text")
+            if text.strip():
+                results.append((page_num, text))
+                logger.debug(
+                    f"[OCR] Page {page_num}: {len(text)} chars extracted"
+                )
+        out_doc.close()
 
-        # Handle both return formats:
-        # PaddleOCR 2.x: list[list[list[box, (text, score)]]]  → result[0] is the page
-        # PaddleOCR 3.x: same outer structure or flat list
-        page_result = result[0] if (result and isinstance(result[0], list)) else result
+        logger.info(
+            f"[OCR] OCRmyPDF finished — "
+            f"{len(results)}/{len(page_numbers)} pages with text"
+        )
+        return results
 
-        if not page_result:
-            return page_index, ""
-
-        for item in page_result:
-            try:
-                # Standard 2.x format: [box_coords, (text, confidence)]
-                if isinstance(item, (list, tuple)) and len(item) >= 2:
-                    text_info = item[1]
-                    if isinstance(text_info, (list, tuple)) and len(text_info) >= 1:
-                        lines.append(str(text_info[0]))
-                    elif isinstance(text_info, str):
-                        lines.append(text_info)
-                elif isinstance(item, str):
-                    lines.append(item)
-            except Exception:
-                continue
-
-        return page_index, "\n".join(lines)
     except Exception as exc:
-        logger.warning(f"[OCR] Page {page_index} OCR failed: {exc}")
-        return page_index, ""
-
+        # Covers: PriorOcrFoundError, EncryptedPdfError, InputFileError, etc.
+        # Same "skip and continue" contract as the old PaddleOCR path.
+        logger.error(
+            f"[OCR] OCRmyPDF failed: {exc} — scanned pages will be skipped."
+        )
+        return []
+    finally:
+        if tmp_output and os.path.exists(tmp_output):
+            os.unlink(tmp_output)
 
 
 # ---------------------------------------------------------------------------
-# Core extraction: hybrid PyMuPDF + PaddleOCR
+# Core extraction: hybrid PyMuPDF + OCRmyPDF
 # ---------------------------------------------------------------------------
 
-def _extract_text_hybrid(pdf_path: str) -> list[tuple[int, str]]:
+def _extract_text_hybrid(pdf_path: str) -> list:
     """
     Extract text from every page of the PDF using a two-pass hybrid strategy:
 
     Pass 1 (fast, C-backed):
         PyMuPDF extracts native text from all pages simultaneously.
 
-    Pass 2 (parallel OCR — only for scanned pages):
-        Pages that fail the text threshold are rendered to PNG and passed to
-        PaddleOCR in a ThreadPoolExecutor.
+    Pass 2 (OCRmyPDF — only for scanned pages):
+        Pages that fail the text threshold are OCR'd in a single OCRmyPDF
+        call scoped to just those page numbers, then re-extracted via
+        PyMuPDF once OCRmyPDF has embedded a text layer.
 
     Returns a list of (page_number_1indexed, text) tuples.
     """
@@ -364,53 +374,27 @@ def _extract_text_hybrid(pdf_path: str) -> list[tuple[int, str]]:
     total_pages = len(doc)
     logger.info(f"[EXTRACT] PyMuPDF opened PDF: {total_pages} pages")
 
-    # Pass 1 — native text extraction (very fast)
-    page_texts: list[tuple[int, str]] = []
-    scanned_pages: list[tuple[int, bytes]] = []  # (page_index, png_bytes)
+    page_texts: list = []
+    scanned_page_numbers: list = []   # 1-indexed page numbers needing OCR
 
     for page_idx in range(total_pages):
         page = doc[page_idx]
-        text = page.get_text("text")  # fast native extraction
+        text = page.get_text("text")
 
         if _is_text_page(text):
             page_texts.append((page_idx + 1, text))
         else:
-            # Render page to PNG for OCR
-            # Resolution: 150 DPI is a good speed/accuracy balance
-            mat = fitz.Matrix(150 / 72, 150 / 72)
-            pix = page.get_pixmap(matrix=mat, colorspace=fitz.csRGB)
-            png_bytes = pix.tobytes("png")
-            scanned_pages.append((page_idx, png_bytes))
+            scanned_page_numbers.append(page_idx + 1)
 
     text_count = len(page_texts)
-    scan_count = len(scanned_pages)
+    scan_count = len(scanned_page_numbers)
     logger.info(
         f"[EXTRACT] Pass 1 done — {text_count} text pages, {scan_count} scanned pages"
     )
     doc.close()
 
-    # Pass 2 — parallel PaddleOCR for scanned pages
-    if scanned_pages:
-        logger.info(f"[OCR] Starting parallel PaddleOCR on {scan_count} pages "
-                    f"({OCR_WORKERS} workers)…")
-        # Warm up PaddleOCR before spawning threads (avoids race condition)
-        _get_paddle_ocr()
-
-        ocr_results: list[tuple[int, str]] = []
-        with ThreadPoolExecutor(max_workers=OCR_WORKERS) as executor:
-            futures = {
-                executor.submit(_ocr_page, page_idx, png_bytes): page_idx
-                for page_idx, png_bytes in scanned_pages
-            }
-            for future in as_completed(futures):
-                page_idx, ocr_text = future.result()
-                if ocr_text.strip():
-                    ocr_results.append((page_idx + 1, ocr_text))
-                    logger.debug(
-                        f"[OCR] Page {page_idx + 1}: {len(ocr_text)} chars extracted"
-                    )
-
-        logger.info(f"[OCR] PaddleOCR finished — {len(ocr_results)} scanned pages with text")
+    if scanned_page_numbers:
+        ocr_results = _run_ocrmypdf(pdf_path, scanned_page_numbers)
         page_texts.extend(ocr_results)
 
     # Sort by page number so chunking preserves document order
