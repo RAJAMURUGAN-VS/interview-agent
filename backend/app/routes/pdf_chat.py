@@ -11,6 +11,7 @@ from ..services.rag_service import (
     create_session,
     clear_session,
     delete_vector_store,
+    answer_question,
     _cached_vector_stores,
     _session_threads,
     CHROMA_PERSIST_DIR,
@@ -86,8 +87,7 @@ def ask_text():
                         "error": "Vector store not found. Please re-upload the PDF."}), 404
 
     try:
-        context, source_docs, relevance_score = retrieve_context(vector_store, question, k=5)
-        answer = build_answer(thread_id, context, question, source_docs, relevance_score)
+        answer = answer_question(vector_store, thread_id, question)
         return jsonify({"success": True, "answer": answer})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
@@ -146,8 +146,7 @@ def ask_speech_answer():
         return jsonify({"success": False, "error": "Vector store not found."}), 404
 
     try:
-        context, source_docs, relevance_score = retrieve_context(vector_store, question, k=5)
-        answer = build_answer(thread_id, context, question, source_docs, relevance_score)
+        answer = answer_question(vector_store, thread_id, question)
         spoken_answer = answer.split("\n\n📄 Sources:")[0]
         import urllib.parse
         safe_answer = urllib.parse.quote(answer)

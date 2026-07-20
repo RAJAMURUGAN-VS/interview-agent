@@ -3,17 +3,17 @@ rag_service.py — Hybrid PDF extraction + RAG pipeline
 ======================================================
 
 Extraction strategy (page-level hybrid):
-  1. PyMuPDF  → fast C-backed native text extraction for every page
-  2. PaddleOCR → deep-learning OCR only for pages where PyMuPDF yields
-                 fewer than MIN_TEXT_CHARS chars (scanned / image pages)
+1. PyMuPDF  → fast C-backed native text extraction for every page
+2. PaddleOCR → deep-learning OCR only for pages where PyMuPDF yields
+                fewer than MIN_TEXT_CHARS chars (scanned / image pages)
 
 Performance optimisations for large (1000-page) PDFs:
-  • PyMuPDF processes text at ~100 pages/second (vs PyPDFLoader ~10 p/s)
-  • PaddleOCR is warmed up ONCE at module load — zero cold-start per upload
-  • Scanned pages are OCR'd in parallel (ThreadPoolExecutor)
-  • Embeddings are computed in a single batch (sentence-transformers batch_size=64)
-  • ChromaDB insertion is a single bulk transaction (collection.add)
-  • In-memory + disk hash cache means re-uploads skip processing entirely
+• PyMuPDF processes text at ~100 pages/second (vs PyPDFLoader ~10 p/s)
+• PaddleOCR is warmed up ONCE at module load — zero cold-start per upload
+• Scanned pages are OCR'd in parallel (ThreadPoolExecutor)
+• Embeddings are computed in a single batch (sentence-transformers batch_size=64)
+• ChromaDB insertion is a single bulk transaction (collection.add)
+• In-memory + disk hash cache means re-uploads skip processing entirely
 """
 
 from __future__ import annotations
@@ -150,6 +150,125 @@ def _get_paddle_ocr():
 _cached_vector_stores: dict[str, Chroma] = {}
 _conversation_history: dict[str, list] = {}
 _session_threads: dict[str, str] = {}
+
+
+# ---------------------------------------------------------------------------
+# Conversation-aware turn router
+# ---------------------------------------------------------------------------
+
+_TURN_ROUTER_PROMPT = """\
+You are looking at a conversation between a user and a PDF study assistant.
+Decide what the user's latest message wants:
+
+A. REFORMAT — the message asks you to transform, filter, shorten, reformat,
+   or extract part of your OWN PREVIOUS ANSWER (e.g. "just give me the names",
+   "make it shorter", "put that in a table", "remove the descriptions",
+   "give me only the topic name", "list only the headings"). It does NOT
+   need new information from the document.
+
+B. STANDALONE — the message is a new, fully self-contained question that
+   does not depend on anything said earlier.
+
+C. FOLLOWUP — the message depends on earlier context to be understood (uses
+   "it", "that", "the second one", assumes a subject mentioned earlier, etc.)
+   but IS asking for new information, not a reformat of the last answer.
+
+Conversation so far:
+{history_text}
+
+Latest user message: {query}
+
+Respond with EXACTLY one of these formats, nothing else:
+- "STANDALONE" — if (B)
+- "REWRITE: <standalone version of the question>" — if (C)
+- "REFORMAT: <the fully transformed answer, applying the user's instruction to your previous answer above>" — if (A)
+"""
+
+
+def route_turn(thread_id: str, query: str) -> tuple[str, str]:
+    """
+    Classify the current turn using the LLM and return (mode, payload).
+
+    Returns:
+      ("standalone", query)        — use query as-is for retrieval
+      ("rewrite",   rewritten_q)  — use rewritten standalone query for retrieval
+      ("reformat",  final_answer) — skip retrieval; payload IS the answer
+
+    Falls back to ("standalone", query) on any error, or when there is no
+    history yet (nothing to route against).
+    """
+    history = _conversation_history.get(thread_id, [])
+    if not history:
+        return "standalone", query
+
+    recent = history[-6:]
+    history_text = "\n".join(
+        f"{msg['role'].upper()}: {msg['content'][:500]}" for msg in recent
+    )
+
+    try:
+        prompt_messages = [
+            {"role": "system", "content": "You are a precise conversation router. Follow the response format exactly."},
+            {"role": "user", "content": _TURN_ROUTER_PROMPT.format(
+                history_text=history_text, query=query
+            )},
+        ]
+        response = _rag_model.invoke(prompt_messages)
+        raw = (response.content if hasattr(response, "content") else str(response)).strip()
+
+        upper = raw.upper()
+        if upper.startswith("REFORMAT:"):
+            payload = raw.split(":", 1)[1].strip()
+            logger.info(f"[ROUTE] REFORMAT turn for '{query}'")
+            return "reformat", payload
+        if upper.startswith("REWRITE:"):
+            rewritten = raw.split(":", 1)[1].strip()
+            if rewritten:
+                logger.info(f"[ROUTE] REWRITE '{query}' → '{rewritten}'")
+                return "rewrite", rewritten
+        # STANDALONE or unrecognised
+        logger.info(f"[ROUTE] STANDALONE turn for '{query}'")
+        return "standalone", query
+    except Exception as exc:
+        logger.warning(f"[ROUTE] Turn routing failed, defaulting to standalone: {exc}")
+        return "standalone", query
+
+
+def answer_question(vector_store, thread_id: str, query: str) -> str:
+    """
+    Full pipeline for one PDF-chat turn.
+    This is the ONLY function routes/pdf_chat.py should call for asking a question.
+
+    Flow:
+      1. route_turn() classifies the turn (STANDALONE / REWRITE / REFORMAT).
+      2. REFORMAT → return the transformed answer immediately, no retrieval.
+      3. REWRITE   → use the rewritten query for retrieval.
+      4. STANDALONE → use the original query for retrieval.
+      5. retrieve_context + build_answer as before.
+    """
+    mode, payload = route_turn(thread_id, query)
+
+    if mode == "reformat":
+        # No retrieval needed — record the turn and return the transformed answer
+        history = _conversation_history.get(thread_id, [])
+        _conversation_history[thread_id] = history + [
+            {"role": "user", "content": query},
+            {"role": "assistant", "content": payload},
+        ]
+        return payload
+
+    effective_query = payload  # either the rewritten standalone or the original
+    context, source_docs, relevance_score = retrieve_context(
+        vector_store, effective_query
+    )
+    return build_answer(
+        thread_id=thread_id,
+        context=context,
+        query=effective_query,
+        source_docs=source_docs,
+        relevance_score=relevance_score,
+        display_query=query,   # always store the original user message in history
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -312,10 +431,10 @@ def get_or_build_vector_store(
     Build and cache the vector store for a PDF.
 
     Pipeline:
-      1. Hybrid text extraction (PyMuPDF + PaddleOCR)
-      2. Recursive character splitting
-      3. Batch embedding (single sentence-transformers pass)
-      4. Bulk ChromaDB insert (single transaction)
+    1. Hybrid text extraction (PyMuPDF + PaddleOCR)
+    2. Recursive character splitting
+    3. Batch embedding (single sentence-transformers pass)
+    4. Bulk ChromaDB insert (single transaction)
 
     Returns (vector_store, file_hash).
     Cached result is returned instantly on subsequent calls.
@@ -342,7 +461,7 @@ def get_or_build_vector_store(
     page_texts = _extract_text_hybrid(pdf_path)
     if not page_texts:
         raise ValueError("No text could be extracted from the PDF. "
-                         "The file may be corrupted or empty.")
+                        "The file may be corrupted or empty.")
 
     total_chars = sum(len(t) for _, t in page_texts)
     logger.info(f"[BUILD] Extraction complete: {len(page_texts)} pages, "
@@ -715,15 +834,15 @@ def retrieve_context(
     Route the query through the appropriate retrieval strategy:
 
     PAGE_RANGE   – exact metadata filter fetch for an explicit page range
-                   (e.g. "between page 5 to 10") — bypasses similarity search
-                   entirely so nothing in the range is missed.
+                (e.g. "between page 5 to 10") — bypasses similarity search
+                entirely so nothing in the range is missed.
     PAGE_SPECIFIC– exact metadata filter fetch for a single referenced page
-                   (e.g. "solve the question on page 7").
+                (e.g. "solve the question on page 7").
     META         – full-document scan (k=60) for overview / summary questions
     ADVISORY     – full-document scan (k=60), same as META — the user is
-                   asking for judgement/recommendations that need the whole
-                   topic list as context, even though the answer itself will
-                   lean on the LLM's own knowledge.
+                asking for judgement/recommendations that need the whole
+                topic list as context, even though the answer itself will
+                lean on the LLM's own knowledge.
     CHAPTER      – wide scan (k=20, relaxed threshold) to find chapter headings
     COMPARISON   – broad scan (k=12) to retrieve info about both subjects
     LIST         – broad scan (k=12) to collect all enumerable items
@@ -833,8 +952,21 @@ def retrieve_context(
             relevant.append((doc, l2_dist))
 
     if not relevant:
-        logger.info("[RAG] All chunks filtered — query not related to PDF.")
-        return "", [], 0.0
+        # Strict filter found nothing — try a broad unfiltered fallback scan
+        # so the LLM (not a threshold) makes the final relevance call.
+        logger.info("[RAG] Strict filter found nothing — trying broad fallback scan.")
+        try:
+            fallback_docs = vector_store.similarity_search(query, k=15)
+        except Exception:
+            fallback_docs = []
+        if not fallback_docs:
+            return "", [], 0.0
+        context_parts = [
+            f"[Excerpt — Page {d.metadata.get('page', 0) + 1}]\n{d.page_content}"
+            for d in fallback_docs
+        ]
+        # score=0.4: "found plausible context" — LLM decides actual relevance
+        return "\n\n".join(context_parts), fallback_docs, 0.4
 
     avg_similarity = sum(
         _l2_to_cosine_similarity(s) for _, s in relevant
@@ -887,25 +1019,25 @@ _DOC_GROUNDING = (
 _RESPONSE_POLICY = """
 RESPONSE STYLE — Final Answer Only Policy:
 A. Output ONLY the final answer. No preamble, no reasoning steps, no process.
-   ✓ Good: "Chapter 7 is titled **Freedom**."
-   ✗ Bad:  "This is listed in the table of contents on Page 4..."
+✓ Good: "Chapter 7 is titled **Freedom**."
+✗ Bad:  "This is listed in the table of contents on Page 4..."
 B. NEVER reveal your reasoning process, thinking steps, or how you derived
-   the answer. Do NOT write things like:
-   - "Based on the excerpts...", "After reading the context..."
-   - "The excerpt shows", "The provided text states"
-   - "According to the retrieved document", "The context mentions"
-   - "Vector search", "Retrieved chunk", "Matching passage"
-   (Exception: when actually SOLVING a problem, showing worked steps toward
-   the solution is part of the answer itself, not process-narration — that's
-   fine and expected.)
+the answer. Do NOT write things like:
+- "Based on the excerpts...", "After reading the context..."
+- "The excerpt shows", "The provided text states"
+- "According to the retrieved document", "The context mentions"
+- "Vector search", "Retrieved chunk", "Matching passage"
+(Exception: when actually SOLVING a problem, showing worked steps toward
+the solution is part of the answer itself, not process-narration — that's
+fine and expected.)
 C. NEVER include self-corrections, retractions, or second-guessing.
-   Do NOT write things like:
-   - "(Note: ...)", "(Self-Correction: ...)", "(Correction: ...)"
-   - "However, upon reflection...", "I must correct my earlier answer"
-   - "Let me re-read...", "Upon re-evaluating..."
-   - "Actually, ..." to contradict something you just said
+Do NOT write things like:
+- "(Note: ...)", "(Self-Correction: ...)", "(Correction: ...)"
+- "However, upon reflection...", "I must correct my earlier answer"
+- "Let me re-read...", "Upon re-evaluating..."
+- "Actually, ..." to contradict something you just said
 D. Do NOT cite page numbers inside your answer text — citations are added
-   automatically. Never write "Page X" or "(Page X)" or "[Page X]".
+automatically. Never write "Page X" or "(Page X)" or "[Page X]".
 E. Every sentence must deliver value to the user. Zero meta-commentary.
 F. Think like ChatGPT: deliver the answer directly, nothing else.
 """
@@ -920,49 +1052,49 @@ _GROUNDING_POLICY = """
 HOW TO DECIDE WHAT TO ANSWER — follow this priority order:
 
 1. FIRST, check whether the document excerpts below answer the question,
-   even partially. If they do, base your answer primarily on them. This is
-   always your first move for factual, structural, or content questions
-   about the PDF (e.g. explaining a topic, defining a term, describing what
-   a chapter covers, listing what appears in the document, working through
-   a question printed in the document).
+even partially. If they do, base your answer primarily on them. This is
+always your first move for factual, structural, or content questions
+about the PDF (e.g. explaining a topic, defining a term, describing what
+a chapter covers, listing what appears in the document, working through
+a question printed in the document).
 
 2. If the question is about the PDF's subject area but asks for something
-   the document itself doesn't state outright — synthesis, prioritisation,
-   study advice, comparisons to outside concepts, "which of these matters
-   most for interviews/placements", general elaboration on a topic the PDF
-   introduces — you SHOULD use your own knowledge to give a genuinely
-   useful answer. Ground it in what the document covers where you can, and
-   add your own expertise on top. Do not refuse just because the exact
-   answer isn't printed in the excerpts — that is expected and welcome here.
+the document itself doesn't state outright — synthesis, prioritisation,
+study advice, comparisons to outside concepts, "which of these matters
+most for interviews/placements", general elaboration on a topic the PDF
+introduces — you SHOULD use your own knowledge to give a genuinely
+useful answer. Ground it in what the document covers where you can, and
+add your own expertise on top. Do not refuse just because the exact
+answer isn't printed in the excerpts — that is expected and welcome here.
 
 3. Only decline to answer if the question has NO connection at all to the
-   uploaded PDF's subject matter or content — e.g. small talk, the current
-   time/date, asking the meaning of a random unrelated word, general
-   trivia with nothing to do with the document's topic. In that case,
-   and ONLY in that case, respond with:
-   "I cannot find this information in the provided document. Please ask
-   questions only about the content in the uploaded PDF."
+uploaded PDF's subject matter or content — e.g. small talk, the current
+time/date, asking the meaning of a random unrelated word, general
+trivia with nothing to do with the document's topic. In that case,
+and ONLY in that case, respond with:
+"I cannot find this information in the provided document. Please ask
+questions only about the content in the uploaded PDF."
 
 4. When solving a question that is printed inside the document (e.g. "solve
-   the question on page 7"), actually work through and answer it — give the
-   full solution/explanation, don't just restate the question back.
+the question on page 7"), actually work through and answer it — give the
+full solution/explanation, don't just restate the question back.
 
 5. When the user bounds their question to a page or page range, answer
-   using only what falls within that range, and say so briefly if the
-   range doesn't fully cover what they asked for.
+using only what falls within that range, and say so briefly if the
+range doesn't fully cover what they asked for.
 
 6. Never invent facts about the document itself (e.g. don't make up a page
-   number, chapter title, or quote that isn't in the excerpts) — the
-   flexibility in rule 2 is about adding your own outside knowledge and
-   perspective, not about fabricating document content.
+number, chapter title, or quote that isn't in the excerpts) — the
+flexibility in rule 2 is about adding your own outside knowledge and
+perspective, not about fabricating document content.
 
 7. Do NOT include citation numbers like [1], [2], [3] in your response.
 
 8. NEVER mention "excerpt", "chunk", "retrieval", "system instructions",
-   "context window", "system prompt", or any other internal/technical term.
+"context window", "system prompt", or any other internal/technical term.
 
 9. Your response must read like it came from a knowledgeable human tutor,
-   never like a system narrating its own process.
+never like a system narrating its own process.
 """
 
 
@@ -1159,7 +1291,7 @@ def _anchor_query_to_pdf(query: str) -> str:
 
     Steps:
     1. Replace vague pronouns ('this', 'the document', 'this book'…) with
-       the explicit phrase 'the uploaded PDF'.
+    the explicit phrase 'the uploaded PDF'.
     2. Prepend a hard anchor prefix instructing Sonar to use ONLY the context.
     """
     import re as _re
@@ -1175,14 +1307,21 @@ def build_answer(
     query: str,
     source_docs: list,
     relevance_score: float = 0.5,
+    display_query: str | None = None,
 ) -> str:
     """
     Invoke the LLM with per-tab conversation history.
-    Gate 1: empty context  → reject without calling LLM.
-    Gate 2: score == 0     → reject (all chunks filtered by distance).
-    Gate 3: LLM refuses    → skip source citations.
+    Gate 1: truly empty source_docs (broken/empty store) → reject.
+    Gate 2: LLM refuses                                  → skip citations.
+
+    NOTE: relevance_score == 0.0 no longer triggers a hard rejection.
+    The LLM (via _RESPONSE_POLICY) decides whether the context is
+    relevant — this prevents on-topic advisory questions from being
+    silently killed by the distance threshold before the model sees them.
     """
     model = _rag_model
+    # The query stored in history is always the original user message.
+    stored_query = display_query if display_query is not None else query
     logger.info(
         f"[ANSWER] META={_is_meta_query(query)} ADVISORY={_is_advisory_query(query)} "
         f"CHAPTER={_is_chapter_query(query)} CMP={_is_comparison_query(query)} "
@@ -1191,9 +1330,9 @@ def build_answer(
         f"docs={len(source_docs)}"
     )
 
-    # Gate 1 & 2 — no relevant chunks found
-    if not source_docs or relevance_score == 0.0:
-        logger.info("[ANSWER] REJECTED — no relevant chunks.")
+    # Gate 1 — only for a genuinely empty result (broken/empty vector store)
+    if not source_docs:
+        logger.info("[ANSWER] REJECTED — no source docs at all.")
         msg = (
             "❌ **This question does not appear to be related to the PDF content.**\n\n"
             "The document does not contain information that matches your query. "
@@ -1202,7 +1341,7 @@ def build_answer(
         )
         history = _conversation_history.get(thread_id, [])
         _conversation_history[thread_id] = history + [
-            {"role": "user", "content": query},
+            {"role": "user", "content": stored_query},
             {"role": "assistant", "content": msg},
         ]
         return msg
@@ -1238,9 +1377,9 @@ def build_answer(
     # Post-process: remove self-contradiction preambles ('Note:', 'Correction:')
     answer = _sanitise_answer(raw_answer)
 
-    # Persist conversation turn with the ORIGINAL query (natural history)
+    # Persist conversation turn — always store the original user message
     _conversation_history[thread_id] = history + [
-        {"role": "user", "content": query},
+        {"role": "user", "content": stored_query},
         {"role": "assistant", "content": answer},
     ]
 
