@@ -4,7 +4,7 @@
 
 ### Date: July 9, 2026
 ### Feature: Two-Step Department → Subject Interview Selection
-### Environment: PlacementPrep AI
+### Environment: MENTRA AI
 
 ---
 
@@ -396,4 +396,4 @@ The feature is production-grade and can proceed immediately to QA testing and de
 
 **Generated:** July 9, 2026
 **By:** Kiro Development System
-**For:** PlacementPrep AI Project
+**For:** MENTRA AI Project

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Add a RAG-powered PDF Chat feature to the PlacementPrep AI application. The backend is Python/Flask with a new `rag_service.py` and `pdf_chat` blueprint. The frontend is TypeScript/React following the existing React Router v6 and component patterns. Existing services (`agent_service`, `stt_service`, `tts_service`) are reused without modification.
+Add a RAG-powered PDF Chat feature to the MENTRA AI application. The backend is Python/Flask with a new `rag_service.py` and `pdf_chat` blueprint. The frontend is TypeScript/React following the existing React Router v6 and component patterns. Existing services (`agent_service`, `stt_service`, `tts_service`) are reused without modification.
 
 ## Tasks
 

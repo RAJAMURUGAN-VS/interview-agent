@@ -1,6 +1,6 @@
 # Interview Section Expansion — Complete Implementation Summary
 
-## Project: PlacementPrep AI
+## Project: MENTRA AI
 ## Feature: Two-Step Department → Subject Selection for Interviews
 ## Status: ✅ FULLY IMPLEMENTED & VERIFIED
 ## Completion Date: July 9, 2026

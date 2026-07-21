@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This document specifies the requirements for the PDF Chat feature in the PlacementPrep AI application. PDF Chat enables users to upload PDF documents and interact with them through a conversational interface using Retrieval-Augmented Generation (RAG). Users can ask questions about the PDF content in either text or speech mode, with answers generated from the document context and accompanied by source page references.
+This document specifies the requirements for the PDF Chat feature in the MENTRA AI application. PDF Chat enables users to upload PDF documents and interact with them through a conversational interface using Retrieval-Augmented Generation (RAG). Users can ask questions about the PDF content in either text or speech mode, with answers generated from the document context and accompanied by source page references.
 
 ## Glossary
 

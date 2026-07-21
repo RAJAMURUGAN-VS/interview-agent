@@ -349,4 +349,4 @@ Everything you need is in this package. Just follow the guides, test using the c
 
 **Generated:** July 9, 2026
 **By:** Kiro Development System
-**For:** PlacementPrep AI Project - Interview Feature Expansion
+**For:** MENTRA AI Project - Interview Feature Expansion

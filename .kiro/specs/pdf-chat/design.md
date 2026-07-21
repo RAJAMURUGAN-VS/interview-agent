@@ -2,7 +2,7 @@
 
 ## Overview
 
-The PDF Chat feature adds a RAG (Retrieval-Augmented Generation) pipeline to the PlacementPrep AI application, allowing users to upload any PDF document and ask questions about its content. Questions can be submitted via typed text or voice, and answers are grounded in the document content with source page citations.
+The PDF Chat feature adds a RAG (Retrieval-Augmented Generation) pipeline to the MENTRA AI application, allowing users to upload any PDF document and ask questions about its content. Questions can be submitted via typed text or voice, and answers are grounded in the document content with source page citations.
 
 The feature integrates cleanly with the existing Flask/React architecture: a new `pdf_chat` blueprint joins the existing `interview` and `feedback` blueprints on the backend, and a new `PdfChatPage` with route `/pdf-chat` joins the existing pages on the frontend. All three existing services (LLM via `agent_service`, STT via `stt_service`, TTS via `tts_service`) are reused without modification.
 

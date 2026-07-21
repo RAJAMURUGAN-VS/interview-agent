@@ -1,4 +1,4 @@
-# Interview Feature Expansion — PlacementPrep AI
+# Interview Feature Expansion — MENTRA AI
 
 ## 🎓 Feature Overview
 
@@ -438,7 +438,7 @@ See `QUICK_FIX_SUMMARY.md` for troubleshooting
 
 ## 🎉 Summary
 
-The Interview Feature Expansion transforms PlacementPrep AI from a simple 4-subject tool into a **comprehensive multi-department interview preparation platform**. With 6 departments, 60+ core subjects, and custom subject support, students can now practice interviews for their specific engineering discipline with questions tailored to their field.
+The Interview Feature Expansion transforms MENTRA AI from a simple 4-subject tool into a **comprehensive multi-department interview preparation platform**. With 6 departments, 60+ core subjects, and custom subject support, students can now practice interviews for their specific engineering discipline with questions tailored to their field.
 
 **Key Benefits:**
 - 🎯 More relevant interview questions
@@ -469,4 +469,4 @@ The Interview Feature Expansion transforms PlacementPrep AI from a simple 4-subj
 
 **Last Updated:** July 9, 2026
 **By:** Kiro Development System
-**For:** PlacementPrep AI
+**For:** MENTRA AI
