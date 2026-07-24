@@ -1,0 +1,830 @@
+/* ============================================================================
+   SECTION 1: UNIVERSAL RULES — #4f46e5 INDIGO IS FIXED IN BOTH THEMES
+   These rules apply regardless of light/dark theme.
+   ============================================================================ */
+
+/* Lock lightbulb icon: always white in both themes */
+.fa-lightbulb {
+  color: #ffffff !important;
+}
+
+/* Lock indigo background: always #4f46e5, always white text */
+.bg-\[\#4f46e5\] {
+  background-color: #4f46e5 !important;
+  color: #ffffff !important;
+}
+.bg-\[\#4f46e5\] * {
+  color: #ffffff !important;
+}
+.bg-\[\#4f46e5\]:hover {
+  background-color: #4f46e5 !important;
+}
+
+/* Lock the darker hover variant too */
+.bg-\[\#4338ca\],
+.hover\:bg-\[\#4338ca\]:hover {
+  background-color: #4338ca !important;
+  color: #ffffff !important;
+}
+.bg-\[\#4338ca\] *,
+.hover\:bg-\[\#4338ca\]:hover * {
+  color: #ffffff !important;
+}
+
+/* ============================================================================
+   SECTION 2: LIGHT THEME — BACKGROUND COLOR OVERRIDES
+   Replace hardcoded dark backgrounds with light equivalents.
+   ============================================================================ */
+
+/* Page-level background (#0a0a0f → white) */
+:root.light-theme .bg-\[\#0a0a0f\] {
+  background-color: #f8f9fa !important;
+}
+
+/* Surface background (#13131a → light secondary)
+   HistoryPanel container uses this — make it a soft gray so
+   white-background cards are clearly visible on top. */
+:root.light-theme .bg-\[\#13131a\] {
+  background-color: #eef0f5 !important;
+}
+
+/* HISTORY CARDS: bg-[#13131a] + rounded-xl = card wrapper (not the panel).
+   Override with white so they stand out against the panel background. */
+:root.light-theme .bg-\[\#13131a\].rounded-xl {
+  background-color: #ffffff !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(203, 213, 225, 0.8) !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* Elevated background (#1c1c27 → light tertiary) */
+:root.light-theme .bg-\[\#1c1c27\] {
+  background-color: #e8eaef !important;
+}
+
+/* Deep dark (2a2a3d → hover state) */
+:root.light-theme .bg-\[\#2a2a3d\] {
+  background-color: #dde1e9 !important;
+}
+
+/* Hover states for dark backgrounds */
+:root.light-theme .hover\:bg-\[\#1c1c27\]:hover {
+  background-color: #e0e3eb !important;
+}
+:root.light-theme .hover\:bg-\[\#2a2a3d\]:hover {
+  background-color: #d5d9e4 !important;
+}
+:root.light-theme .hover\:bg-\[\#0a0a0f\]:hover {
+  background-color: #eef0f5 !important;
+}
+
+/* ============================================================================
+   SECTION 3: LIGHT THEME — TEXT COLOR OVERRIDES
+   Replace hardcoded dark-theme text colors with readable dark equivalents.
+   ============================================================================ */
+
+/* Primary text (#f0f0ff light-on-dark → dark text for light theme) */
+:root.light-theme .text-\[\#f0f0ff\] {
+  color: #0f172a !important;
+}
+
+/* Secondary text (#8b8ba8 → medium dark) */
+:root.light-theme .text-\[\#8b8ba8\] {
+  color: #475569 !important;
+}
+
+/* Muted text (#6b6b7d → slate) */
+:root.light-theme .text-\[\#6b6b7d\] {
+  color: #64748b !important;
+}
+
+/* Dimmer muted (#4a4a6a → slate) */
+:root.light-theme .text-\[\#4a4a6a\] {
+  color: #64748b !important;
+}
+
+/* Hover text overrides */
+:root.light-theme .hover\:text-\[\#f0f0ff\]:hover {
+  color: #0f172a !important;
+}
+:root.light-theme .hover\:text-\[\#1a1a1a\]:hover {
+  color: #0f172a !important;
+}
+
+/* ============================================================================
+   SECTION 4: LIGHT THEME — BORDER COLOR OVERRIDES
+   Replace hardcoded dark borders with light borders.
+   ============================================================================ */
+
+:root.light-theme .border-\[\#2a2a3d\] {
+  border-color: #cbd5e1 !important;
+}
+:root.light-theme .border-\[\#1c1c27\] {
+  border-color: #e2e8f0 !important;
+}
+:root.light-theme .border-\[\#13131a\] {
+  border-color: #f1f5f9 !important;
+}
+:root.light-theme .hover\:border-\[\#2a2a3d\]:hover {
+  border-color: #94a3b8 !important;
+}
+
+/* ============================================================================
+   SECTION 5: LIGHT THEME — LOCK ACCENT COLORS
+   #4f46e5 is kept identical in both themes.
+   ============================================================================ */
+
+/* These stay the same in light theme — just ensure they aren't wiped out */
+:root.light-theme .bg-\[\#4f46e5\] {
+  background-color: #4f46e5 !important;
+  color: #ffffff !important;
+}
+:root.light-theme .bg-\[\#4f46e5\] * {
+  color: #ffffff !important;
+}
+:root.light-theme .bg-\[\#4338ca\] {
+  background-color: #4338ca !important;
+  color: #ffffff !important;
+}
+:root.light-theme .bg-\[\#4338ca\] * {
+  color: #ffffff !important;
+}
+:root.light-theme .hover\:bg-\[\#4338ca\]:hover {
+  background-color: #4338ca !important;
+  color: #ffffff !important;
+}
+:root.light-theme .hover\:bg-\[\#4338ca\]:hover * {
+  color: #ffffff !important;
+}
+
+/* Accent text and borders stay indigo */
+:root.light-theme .text-\[\#4f46e5\] {
+  color: #4f46e5 !important;
+}
+:root.light-theme .border-\[\#4f46e5\] {
+  border-color: #4f46e5 !important;
+}
+:root.light-theme .hover\:border-\[\#4f46e5\]:hover {
+  border-color: #4f46e5 !important;
+}
+:root.light-theme .hover\:text-\[\#4f46e5\]:hover {
+  color: #4f46e5 !important;
+}
+
+/* Indigo opacity variants */
+:root.light-theme .bg-\[\#4f46e5\]\/5 {
+  background-color: rgba(79, 70, 229, 0.05) !important;
+}
+:root.light-theme .bg-\[\#4f46e5\]\/8 {
+  background-color: rgba(79, 70, 229, 0.08) !important;
+}
+:root.light-theme .bg-\[\#4f46e5\]\/10 {
+  background-color: rgba(79, 70, 229, 0.10) !important;
+}
+:root.light-theme .bg-\[\#4f46e5\]\/15 {
+  background-color: rgba(79, 70, 229, 0.15) !important;
+}
+:root.light-theme .bg-\[\#4f46e5\]\/20 {
+  background-color: rgba(79, 70, 229, 0.20) !important;
+}
+:root.light-theme .bg-\[\#4f46e5\]\/25 {
+  background-color: rgba(79, 70, 229, 0.25) !important;
+}
+
+/* Keep indigo text in opacity-bg containers readable */
+:root.light-theme .bg-\[\#4f46e5\]\/5,
+:root.light-theme .bg-\[\#4f46e5\]\/8,
+:root.light-theme .bg-\[\#4f46e5\]\/10,
+:root.light-theme .bg-\[\#4f46e5\]\/15,
+:root.light-theme .bg-\[\#4f46e5\]\/20,
+:root.light-theme .bg-\[\#4f46e5\]\/25 {
+  color: #4f46e5 !important;
+}
+:root.light-theme .border-\[\#4f46e5\]\/20 {
+  border-color: rgba(79, 70, 229, 0.3) !important;
+}
+:root.light-theme .border-\[\#4f46e5\]\/30 {
+  border-color: rgba(79, 70, 229, 0.4) !important;
+}
+:root.light-theme .border-\[\#4f46e5\]\/40 {
+  border-color: rgba(79, 70, 229, 0.5) !important;
+}
+:root.light-theme .border-\[\#4f46e5\]\/50 {
+  border-color: rgba(79, 70, 229, 0.6) !important;
+}
+
+/* ============================================================================
+   SECTION 6: LIGHT THEME — BODY, HEADINGS, CORE ELEMENTS
+   ============================================================================ */
+
+:root.light-theme,
+:root.light-theme body,
+:root.light-theme #root {
+  background-color: #ffffff;
+  color: #0f172a;
+}
+
+:root.light-theme h1,
+:root.light-theme h2,
+:root.light-theme h3,
+:root.light-theme h4,
+:root.light-theme h5,
+:root.light-theme h6 {
+  color: #0f172a !important;
+}
+
+:root.light-theme p,
+:root.light-theme li,
+:root.light-theme dt,
+:root.light-theme dd {
+  color: #0f172a !important;
+}
+
+:root.light-theme span {
+  color: inherit;
+}
+
+/* ============================================================================
+   SECTION 7: LIGHT THEME — CARDS & PANELS
+   ============================================================================ */
+
+:root.light-theme .card {
+  background-color: #f8f9fa !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06) !important;
+}
+
+:root.light-theme [class*="panel"] {
+  background-color: #f8f9fa !important;
+  color: #0f172a !important;
+}
+
+/* ============================================================================
+   SECTION 8: LIGHT THEME — NAVIGATION
+   ============================================================================ */
+
+:root.light-theme nav {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+
+/* NavBar active tab — #4f46e5 with white text (same as dark) */
+:root.light-theme nav .bg-\[\#4f46e5\] {
+  background-color: #4f46e5 !important;
+  color: #ffffff !important;
+}
+:root.light-theme nav .bg-\[\#4f46e5\] * {
+  color: #ffffff !important;
+}
+:root.light-theme nav .bg-\[\#4f46e5\] i,
+:root.light-theme nav .bg-\[\#4f46e5\] span {
+  color: #ffffff !important;
+}
+
+/* NavBar inactive tabs */
+:root.light-theme nav .text-\[\#4a4a5e\] {
+  color: #475569 !important;
+}
+:root.light-theme nav .text-\[\#8b8ba8\] {
+  color: #64748b !important;
+}
+
+/* Logo text */
+:root.light-theme nav span.font-bold {
+  color: #0f172a !important;
+}
+
+/* Shadow selector for active tab — preserve white text */
+:root.light-theme .shadow-\[0_0_12px_rgba\(79\,70\,229\,0\.3\)\] {
+  color: #ffffff !important;
+}
+
+/* ============================================================================
+   SECTION 9: LIGHT THEME — BUTTONS
+   ============================================================================ */
+
+/* Generic buttons get dark text by default */
+:root.light-theme button {
+  color: inherit;
+}
+
+/* Primary indigo button — white text, always */
+:root.light-theme button.bg-\[\#4f46e5\],
+:root.light-theme .bg-\[\#4f46e5\] button {
+  background-color: #4f46e5 !important;
+  color: #ffffff !important;
+}
+
+/* Ghost/secondary buttons — dark text */
+:root.light-theme button:not([class*="bg-[#4f46e5]"]):not([class*="bg-[#4338ca]"]):not([class*="bg-[#ef4444]"]):not([class*="bg-[#22c55e]"]):not([class*="bg-[#3b82f6]"]):not([class*="bg-[#a855f7]"]) {
+  color: #0f172a;
+}
+
+/* ============================================================================
+   SECTION 10: LIGHT THEME — INPUTS & FORMS
+   ============================================================================ */
+
+:root.light-theme input,
+:root.light-theme textarea,
+:root.light-theme select {
+  background-color: #f8f9fa !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+:root.light-theme input::placeholder,
+:root.light-theme textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+:root.light-theme input:focus,
+:root.light-theme textarea:focus,
+:root.light-theme select:focus {
+  border-color: #4f46e5 !important;
+  background-color: #ffffff !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15) !important;
+}
+
+:root.light-theme select,
+:root.light-theme option {
+  background-color: #f8f9fa !important;
+  color: #0f172a !important;
+}
+
+/* ============================================================================
+   SECTION 11: LIGHT THEME — CODE BLOCKS & MARKDOWN
+   ============================================================================ */
+
+:root.light-theme code {
+  background-color: #f0f1f5 !important;
+  color: #4f46e5 !important;
+  border-color: #e2e8f0 !important;
+}
+
+:root.light-theme pre {
+  background-color: #f0f1f5 !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+:root.light-theme pre code {
+  background-color: transparent !important;
+  color: #0f172a !important;
+}
+
+:root.light-theme .markdown-body {
+  color: #0f172a !important;
+}
+
+:root.light-theme .markdown-body h1,
+:root.light-theme .markdown-body h2,
+:root.light-theme .markdown-body h3,
+:root.light-theme .markdown-body h4,
+:root.light-theme .markdown-body h5,
+:root.light-theme .markdown-body h6,
+:root.light-theme .markdown-body p,
+:root.light-theme .markdown-body li,
+:root.light-theme .markdown-body blockquote {
+  color: #0f172a !important;
+}
+
+:root.light-theme .markdown-body code {
+  background-color: #e8eaef !important;
+  color: #4f46e5 !important;
+}
+
+:root.light-theme .markdown-body pre {
+  background-color: #f0f1f5 !important;
+  border-color: #cbd5e1 !important;
+}
+
+:root.light-theme .markdown-body pre code {
+  background-color: transparent !important;
+  color: #0f172a !important;
+}
+
+/* ============================================================================
+   SECTION 12: LIGHT THEME — STATUS / ALERT COLORS
+   ============================================================================ */
+
+/* Success */
+:root.light-theme .text-\[\#10b981\],
+:root.light-theme .text-\[\#22c55e\] {
+  color: #059669 !important;
+}
+:root.light-theme .bg-\[\#10b981\]\/10,
+:root.light-theme .bg-\[\#22c55e\]\/10 {
+  background-color: rgba(5, 150, 105, 0.1) !important;
+}
+
+/* Error */
+:root.light-theme .text-\[\#ef4444\],
+:root.light-theme .text-\[\#dc2626\] {
+  color: #dc2626 !important;
+}
+:root.light-theme .bg-\[\#ef4444\]\/10 {
+  background-color: rgba(220, 38, 38, 0.1) !important;
+}
+
+/* Warning */
+:root.light-theme .text-\[\#f59e0b\],
+:root.light-theme .text-\[\#d97706\] {
+  color: #d97706 !important;
+}
+:root.light-theme .bg-\[\#f59e0b\]\/10 {
+  background-color: rgba(217, 119, 6, 0.1) !important;
+}
+
+/* Info */
+:root.light-theme .text-\[\#3b82f6\],
+:root.light-theme .text-\[\#1d4ed8\] {
+  color: #1d4ed8 !important;
+}
+:root.light-theme .bg-\[\#3b82f6\]\/10 {
+  background-color: rgba(29, 78, 216, 0.1) !important;
+}
+
+/* Solid colored backgrounds keep white text */
+:root.light-theme .bg-\[\#ef4444\] {
+  background-color: #ef4444 !important;
+  color: #ffffff !important;
+}
+:root.light-theme .bg-\[\#ef4444\] * { color: #ffffff !important; }
+
+:root.light-theme .bg-\[\#22c55e\],
+:root.light-theme .bg-\[\#10b981\] {
+  background-color: #22c55e !important;
+  color: #ffffff !important;
+}
+:root.light-theme .bg-\[\#22c55e\] *,
+:root.light-theme .bg-\[\#10b981\] * { color: #ffffff !important; }
+
+:root.light-theme .bg-\[\#3b82f6\] {
+  background-color: #3b82f6 !important;
+  color: #ffffff !important;
+}
+:root.light-theme .bg-\[\#3b82f6\] * { color: #ffffff !important; }
+
+:root.light-theme .bg-\[\#a855f7\] {
+  background-color: #a855f7 !important;
+  color: #ffffff !important;
+}
+:root.light-theme .bg-\[\#a855f7\] * { color: #ffffff !important; }
+
+/* Orange: dark text for contrast */
+:root.light-theme .bg-\[\#f59e0b\] {
+  background-color: #f59e0b !important;
+  color: #1a1a1a !important;
+}
+:root.light-theme .bg-\[\#f59e0b\] * { color: #1a1a1a !important; }
+
+/* ============================================================================
+   SECTION 13: LIGHT THEME — TABLES
+   ============================================================================ */
+
+:root.light-theme table,
+:root.light-theme thead,
+:root.light-theme tbody,
+:root.light-theme tr,
+:root.light-theme th,
+:root.light-theme td {
+  background-color: #f8f9fa !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+:root.light-theme th {
+  background-color: #f0f1f5 !important;
+  color: #0f172a !important;
+}
+
+:root.light-theme tr:hover {
+  background-color: #e8eaef !important;
+}
+
+/* ============================================================================
+   SECTION 14: LIGHT THEME — MODALS & DROPDOWNS
+   ============================================================================ */
+
+:root.light-theme [class*="modal"],
+:root.light-theme dialog {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #e2e8f0 !important;
+}
+
+:root.light-theme [class*="backdrop"],
+:root.light-theme [class*="modal-overlay"] {
+  background-color: rgba(0, 0, 0, 0.2) !important;
+}
+
+:root.light-theme select,
+:root.light-theme [class*="dropdown"] {
+  background-color: #f8f9fa !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* ============================================================================
+   SECTION 15: LIGHT THEME — PROGRESS BARS & INTERACTIVE
+   ============================================================================ */
+
+/* Progress bar track */
+:root.light-theme .h-2.bg-\[\#1c1c27\],
+:root.light-theme .h-1\.5.bg-\[\#1c1c27\] {
+  background-color: #e2e8f0 !important;
+}
+
+/* Streaming cursor */
+:root.light-theme .streaming-cursor {
+  background-color: #4f46e5 !important;
+}
+
+/* Pulse ring */
+:root.light-theme .pulse-ring::before {
+  border-color: #4f46e5 !important;
+}
+
+/* ============================================================================
+   SECTION 16: LIGHT THEME — SUBJECT COLORS (OS, OOP, DBMS, CN)
+   ============================================================================ */
+
+:root.light-theme .subject-os   { color: #2563eb !important; }
+:root.light-theme .subject-oop  { color: #9333ea !important; }
+:root.light-theme .subject-dbms { color: #d97706 !important; }
+:root.light-theme .subject-cn   { color: #059669 !important; }
+
+:root.light-theme .border-os   { border-color: #2563eb !important; }
+:root.light-theme .border-oop  { border-color: #9333ea !important; }
+:root.light-theme .border-dbms { border-color: #d97706 !important; }
+:root.light-theme .border-cn   { border-color: #059669 !important; }
+
+:root.light-theme .bg-os   { background: rgba(37, 99, 235, 0.1) !important; }
+:root.light-theme .bg-oop  { background: rgba(147, 51, 234, 0.1) !important; }
+:root.light-theme .bg-dbms { background: rgba(217, 119, 6, 0.1) !important; }
+:root.light-theme .bg-cn   { background: rgba(5, 150, 105, 0.1) !important; }
+
+/* ============================================================================
+   SECTION 17: LIGHT THEME — TAILWIND GRAY / UTILITY OVERRIDES
+   ============================================================================ */
+
+:root.light-theme .text-gray-900 { color: #0f172a !important; }
+:root.light-theme .text-gray-800 { color: #1e293b !important; }
+:root.light-theme .text-gray-700 { color: #334155 !important; }
+:root.light-theme .text-gray-600 { color: #475569 !important; }
+:root.light-theme .text-gray-500 { color: #64748b !important; }
+:root.light-theme .text-gray-400 { color: #94a3b8 !important; }
+
+:root.light-theme .bg-gray-50  { background-color: #f8fafc !important; }
+:root.light-theme .bg-gray-100 { background-color: #f1f5f9 !important; }
+:root.light-theme .bg-gray-200 { background-color: #e2e8f0 !important; }
+:root.light-theme .bg-gray-900 { background-color: #0f172a !important; }
+
+:root.light-theme .border-gray-200 { border-color: #e2e8f0 !important; }
+:root.light-theme .border-gray-300 { border-color: #cbd5e1 !important; }
+
+/* text-white in light theme: for plain white text (non-colored-bg), show dark */
+:root.light-theme .text-white {
+  color: #0f172a !important;
+}
+
+/* EXCEPTION: White text must stay white inside any colored solid background */
+:root.light-theme .bg-\[\#4f46e5\] .text-white,
+:root.light-theme .bg-\[\#4f46e5\] .text-\[\#f0f0ff\],
+:root.light-theme .bg-\[\#4338ca\] .text-white,
+:root.light-theme .bg-\[\#ef4444\] .text-white,
+:root.light-theme .bg-\[\#22c55e\] .text-white,
+:root.light-theme .bg-\[\#10b981\] .text-white,
+:root.light-theme .bg-\[\#3b82f6\] .text-white,
+:root.light-theme .bg-\[\#a855f7\] .text-white {
+  color: #ffffff !important;
+}
+
+/* ============================================================================
+   SECTION 18: LIGHT THEME — LINKS
+   ============================================================================ */
+
+:root.light-theme a:not([class*="text-white"]) {
+  color: #4f46e5;
+}
+:root.light-theme a:hover:not([class*="text-white"]) {
+  color: #4338ca;
+}
+
+/* ============================================================================
+   SECTION 19: LIGHT THEME — SCROLLBARS
+   ============================================================================ */
+
+:root.light-theme ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+:root.light-theme ::-webkit-scrollbar-track {
+  background-color: #f1f5f9;
+}
+:root.light-theme ::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 4px;
+}
+:root.light-theme ::-webkit-scrollbar-thumb:hover {
+  background-color: #94a3b8;
+}
+
+/* ============================================================================
+   SECTION 20: LIGHT THEME — TRANSITIONS
+   ============================================================================ */
+
+:root.light-theme * {
+  transition-property: background-color, border-color, color, box-shadow;
+  transition-duration: 300ms;
+  transition-timing-function: ease;
+}
+
+/* ============================================================================
+   SECTION 21: LIGHT THEME — SIDEBAR OVERRIDE
+   The Sidebar uses hardcoded dark gradient. Override for light theme.
+   ============================================================================ */
+
+:root.light-theme aside {
+  background: linear-gradient(to bottom, #f8f9fa, #f1f3f5) !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+:root.light-theme aside .text-gray-400 {
+  color: #64748b !important;
+}
+
+:root.light-theme aside span.font-bold {
+  color: #4f46e5 !important;
+}
+
+:root.light-theme aside p {
+  color: #64748b !important;
+}
+
+/* Sidebar idle nav links */
+:root.light-theme aside a {
+  color: #0f172a !important;
+}
+:root.light-theme aside a span {
+  color: #0f172a !important;
+}
+:root.light-theme aside a .text-gray-400 {
+  color: #64748b !important;
+}
+
+/* Sidebar idle tab background (zinc overrides) */
+:root.light-theme aside a.bg-zinc-900\/30,
+:root.light-theme aside .bg-zinc-900\/30 {
+  background-color: rgba(241, 243, 245, 0.9) !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+:root.light-theme aside a.hover\:bg-zinc-800\/50:hover,
+:root.light-theme aside .hover\:bg-zinc-800\/50:hover {
+  background-color: rgba(226, 232, 240, 0.9) !important;
+}
+:root.light-theme aside .border-zinc-700\/50 {
+  border-color: #cbd5e1 !important;
+}
+:root.light-theme aside .hover\:border-zinc-500:hover {
+  border-color: #94a3b8 !important;
+}
+
+/* Sidebar logo gradient text - override bg-clip-text gradient for light */
+:root.light-theme aside .bg-clip-text {
+  background: linear-gradient(to right, #4f46e5, #7c3aed) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  color: transparent !important;
+}
+:root.light-theme aside .text-transparent {
+  color: transparent !important;
+}
+
+/* Sidebar all icon colors */
+:root.light-theme aside i {
+  color: inherit !important;
+}
+
+/* ============================================================================
+   SECTION 22: LIGHT THEME — APPSHELL OVERRIDE
+   AppShell uses bg-[#0a0a0f] and Sidebar uses from-[#0a0a0a] to black.
+   ============================================================================ */
+
+:root.light-theme .min-h-screen.bg-\[\#0a0a0f\] {
+  background-color: #ffffff !important;
+}
+
+:root.light-theme .bg-gradient-to-b.from-\[\#0a0a0a\] {
+  background: linear-gradient(to bottom, #f8f9fa, #f1f3f5) !important;
+}
+
+/* ============================================================================
+   SECTION 23: LIGHT THEME — INDIGO VARIANTS OVERRIDE
+   #818cf8 and #a5b4fc are light indigo — too faint on white, darken them.
+   ============================================================================ */
+
+:root.light-theme .text-\[\#818cf8\] {
+  color: #4f46e5 !important;
+}
+:root.light-theme .text-\[\#a5b4fc\] {
+  color: #4f46e5 !important;
+}
+
+/* ============================================================================
+   SECTION 24: LIGHT THEME — ZINC / SLATE DARK OVERRIDES
+   ============================================================================ */
+
+:root.light-theme .bg-zinc-900 { background-color: #f1f5f9 !important; }
+:root.light-theme .bg-zinc-800 { background-color: #e2e8f0 !important; }
+:root.light-theme .text-zinc-400 { color: #64748b !important; }
+:root.light-theme .text-zinc-500 { color: #475569 !important; }
+:root.light-theme .border-zinc-800 { border-color: #e2e8f0 !important; }
+:root.light-theme .border-zinc-700 { border-color: #cbd5e1 !important; }
+
+/* ============================================================================
+   SECTION 26: LIGHT THEME — HISTORY PANEL SLIDE-OVER
+   HistoryPanel uses bg-[#13131a] (same as the cards inside it).
+   Give the full-height panel a clean white base with a shadow, then
+   cards on top get a subtle bg-[#f8f9fa] tint to differentiate them.
+   ============================================================================ */
+
+/* The full-height fixed slide-over panel */
+:root.light-theme .fixed.h-full.bg-\[\#13131a\] {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.10) !important;
+}
+
+/* Panel header border */
+:root.light-theme .fixed.h-full.bg-\[\#13131a\] .border-b {
+  border-color: #e2e8f0 !important;
+}
+
+/* Panel header text */
+:root.light-theme .fixed.h-full.bg-\[\#13131a\] h2 {
+  color: #0f172a !important;
+}
+
+/* Card within the panel — override the base bg-[#13131a] assignment
+   to something clearly distinct from the white panel */
+:root.light-theme .fixed.h-full.bg-\[\#13131a\] .bg-\[\#13131a\].rounded-xl {
+  background-color: #f8f9fa !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.07) !important;
+}
+
+/* Card text inside history panel */
+:root.light-theme .fixed.h-full.bg-\[\#13131a\] .text-\[\#f0f0ff\] {
+  color: #0f172a !important;
+}
+:root.light-theme .fixed.h-full.bg-\[\#13131a\] .text-\[\#4a4a6a\] {
+  color: #64748b !important;
+}
+:root.light-theme .fixed.h-full.bg-\[\#13131a\] .text-\[\#8b8ba8\] {
+  color: #475569 !important;
+}
+
+/* Expanded content area inside card */
+:root.light-theme .fixed.h-full.bg-\[\#13131a\] .bg-\[\#1c1c27\] {
+  background-color: #f0f2f7 !important;
+  border-color: #e2e8f0 !important;
+}
+
+/* Expand/delete buttons in history cards */
+:root.light-theme .fixed.h-full.bg-\[\#13131a\] button.w-7.h-7 {
+  color: #64748b !important;
+}
+:root.light-theme .fixed.h-full.bg-\[\#13131a\] button.w-7.h-7:hover {
+  background-color: #e8eaef !important;
+  color: #0f172a !important;
+}
+
+/* Close button in panel header */
+:root.light-theme .fixed.h-full.bg-\[\#13131a\] button.w-8.h-8 {
+  color: #64748b !important;
+}
+:root.light-theme .fixed.h-full.bg-\[\#13131a\] button.w-8.h-8:hover {
+  background-color: #f0f2f7 !important;
+  color: #0f172a !important;
+}
+
+
+/* ============================================================================
+   SECTION 25: ACCESSIBILITY — Color scheme preferences
+   ============================================================================ */
+
+@media (prefers-color-scheme: light) {
+  :root:not(.light-theme) {
+    color-scheme: light;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light-theme) {
+    color-scheme: dark;
+  }
+}

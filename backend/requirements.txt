@@ -2,6 +2,9 @@ flask
 flask-cors
 flask-sqlalchemy
 python-dotenv
+# Auth dependencies
+google-auth
+PyJWT
 langchain
 langgraph
 langchain-google-genai

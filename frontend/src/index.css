@@ -1,4 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import './styles/theme.css';
+@import './styles/light-theme-components.css';
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -21,6 +23,26 @@
   --color-cn:       #10b981;
   --danger:         #ef4444;
   --success:        #22c55e;
+}
+
+:root.light-theme {
+  --bg-page:        #ffffff;
+  --bg-surface:     #f8f9fa;
+  --bg-elevated:    #f0f1f5;
+  --border:         #cbd5e1;
+  --border-highlight: #4f46e5;
+  --text-primary:   #0f172a;
+  --text-secondary: #475569;
+  --text-muted:     #64748b;
+  --accent:         #4f46e5;
+  --accent-hover:   #4338ca;
+  --accent-glow:    rgba(79,70,229,0.15);
+  --color-os:       #2563eb;
+  --color-oop:      #9333ea;
+  --color-dbms:     #d97706;
+  --color-cn:       #059669;
+  --danger:         #dc2626;
+  --success:        #16a34a;
 }
 
 * {
@@ -54,7 +76,7 @@ html {
   border: 1px solid var(--border);
   border-radius: 16px;
   padding: 16px;
-  box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
 }
 
 @media (min-width: 640px) {
@@ -202,13 +224,13 @@ html {
   background-color: rgba(255, 255, 255, 0.08);
   padding: 2px 4px;
   border-radius: 4px;
-  color: #ff79c6;
+  color: var(--accent);
 }
 
 .markdown-body pre {
   margin: 12px 0;
   padding: 12px;
-  background-color: #0d0d12;
+  background-color: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: 8px;
   overflow-x: auto;
@@ -247,12 +269,12 @@ html {
 }
 
 .markdown-body th {
-  background-color: rgba(255, 255, 255, 0.04);
+  background-color: var(--bg-elevated);
   font-weight: 600;
 }
 
 .markdown-body tr:nth-child(even) {
-  background-color: rgba(255, 255, 255, 0.01);
+  background-color: var(--bg-surface);
 }
 
 
@@ -267,4 +289,14 @@ html {
 @keyframes slideInRight {
   from { transform: translateX(100%); }
   to   { transform: translateX(0); }
+}
+
+@keyframes slideInFromLeft {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(0); }
+}
+
+@keyframes slideInButtonFromLeft {
+  from { transform: translateX(-100%); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
 }

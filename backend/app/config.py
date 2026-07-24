@@ -26,3 +26,10 @@ class Config:
 
     # ── Doubt Solver / Tavily Search ──────────────────────────────────────
     TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
+
+    # ── Auth — Google Identity Services + session JWT ─────────────────────
+    # Reuses the same Google OAuth Client ID already in .env.
+    # Verify audience claim on incoming Google ID tokens.
+    GOOGLE_CLIENT_ID  = os.getenv("GOOGLE_CLIENT_ID")
+    # Random secret for signing the app's own session JWTs.
+    JWT_SECRET_KEY    = os.getenv("JWT_SECRET_KEY", "change-me-in-production")

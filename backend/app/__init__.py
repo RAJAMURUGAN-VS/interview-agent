@@ -45,6 +45,7 @@ def create_app():
     from .routes import playlist as playlist_routes
     from .routes import doubt_solver as doubt_solver_routes
     from .routes import prep_plan as prep_plan_routes
+    from .routes import auth as auth_routes
 
     app.register_blueprint(interview.bp)
     app.register_blueprint(feedback.bp)
@@ -55,6 +56,7 @@ def create_app():
     app.register_blueprint(playlist_routes.bp)
     app.register_blueprint(doubt_solver_routes.bp)
     app.register_blueprint(prep_plan_routes.bp)
+    app.register_blueprint(auth_routes.auth_bp)
 
     # ── Create tables + seed on first run ───────────────────────────────
     with app.app_context():
@@ -68,6 +70,7 @@ def create_app():
             CompanyPattern,
             TopicResourceCache,
         )
+        from .models.user import User  # noqa: F401 — creates 'users' table
         db.create_all()
         seed_db()
 
